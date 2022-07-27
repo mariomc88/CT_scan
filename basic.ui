@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>619</width>
-    <height>389</height>
+    <height>530</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -24,84 +24,10 @@
      </rect>
     </property>
     <layout class="QGridLayout" name="gridLayout">
-     <item row="2" column="1">
-      <widget class="QLineEdit" name="lineEdit_vertical">
-       <property name="statusTip">
-        <string>Set vertical position in mm</string>
-       </property>
-       <property name="placeholderText">
-        <string>0</string>
-       </property>
-      </widget>
-     </item>
-     <item row="0" column="0">
-      <widget class="QLabel" name="label_detector">
-       <property name="enabled">
-        <bool>true</bool>
-       </property>
-       <property name="layoutDirection">
-        <enum>Qt::LeftToRight</enum>
-       </property>
-       <property name="text">
-        <string>Detector position</string>
-       </property>
-      </widget>
-     </item>
-     <item row="2" column="0">
-      <widget class="QLabel" name="label_vertical">
-       <property name="text">
-        <string>Vertical position</string>
-       </property>
-      </widget>
-     </item>
-     <item row="1" column="0">
-      <widget class="QLabel" name="label_sample">
-       <property name="text">
-        <string>Sample position</string>
-       </property>
-      </widget>
-     </item>
-     <item row="1" column="1">
-      <widget class="QLineEdit" name="lineEdit_sample">
-       <property name="statusTip">
-        <string>Set sample position in mm</string>
-       </property>
-       <property name="placeholderText">
-        <string>0</string>
-       </property>
-      </widget>
-     </item>
      <item row="3" column="0">
       <widget class="QLabel" name="label_steps_rotation">
        <property name="text">
         <string>Angles per rotation</string>
-       </property>
-      </widget>
-     </item>
-     <item row="4" column="2">
-      <widget class="QPushButton" name="pushButton_set">
-       <property name="text">
-        <string>Set</string>
-       </property>
-      </widget>
-     </item>
-     <item row="0" column="1">
-      <widget class="QLineEdit" name="lineEdit_detector">
-       <property name="statusTip">
-        <string>Set detector position in mm</string>
-       </property>
-       <property name="placeholderText">
-        <string>0</string>
-       </property>
-      </widget>
-     </item>
-     <item row="3" column="1">
-      <widget class="QLineEdit" name="lineEdit_steps">
-       <property name="statusTip">
-        <string>Set the numbers of angles to cover per rotation</string>
-       </property>
-       <property name="placeholderText">
-        <string>0</string>
        </property>
       </widget>
      </item>
@@ -143,6 +69,98 @@
        </item>
       </layout>
      </item>
+     <item row="4" column="2">
+      <widget class="QPushButton" name="pushButton_set">
+       <property name="text">
+        <string>Set</string>
+       </property>
+      </widget>
+     </item>
+     <item row="0" column="0">
+      <widget class="QLabel" name="label_detector">
+       <property name="enabled">
+        <bool>true</bool>
+       </property>
+       <property name="layoutDirection">
+        <enum>Qt::LeftToRight</enum>
+       </property>
+       <property name="text">
+        <string>Detector position</string>
+       </property>
+      </widget>
+     </item>
+     <item row="1" column="0">
+      <widget class="QLabel" name="label_sample">
+       <property name="text">
+        <string>Sample position</string>
+       </property>
+      </widget>
+     </item>
+     <item row="0" column="1">
+      <widget class="QLineEdit" name="lineEdit_detector">
+       <property name="statusTip">
+        <string>Set detector position in mm</string>
+       </property>
+       <property name="placeholderText">
+        <string>0</string>
+       </property>
+      </widget>
+     </item>
+     <item row="2" column="0">
+      <widget class="QLabel" name="label_vertical">
+       <property name="text">
+        <string>Vertical position</string>
+       </property>
+      </widget>
+     </item>
+     <item row="3" column="1">
+      <widget class="QLineEdit" name="lineEdit_steps">
+       <property name="statusTip">
+        <string>Set the numbers of angles to cover per rotation</string>
+       </property>
+       <property name="placeholderText">
+        <string>0</string>
+       </property>
+      </widget>
+     </item>
+     <item row="2" column="1">
+      <widget class="QLineEdit" name="lineEdit_vertical">
+       <property name="statusTip">
+        <string>Set vertical position in mm</string>
+       </property>
+       <property name="placeholderText">
+        <string>0</string>
+       </property>
+      </widget>
+     </item>
+     <item row="1" column="1">
+      <widget class="QLineEdit" name="lineEdit_sample">
+       <property name="statusTip">
+        <string>Set sample position in mm</string>
+       </property>
+       <property name="placeholderText">
+        <string>0</string>
+       </property>
+      </widget>
+     </item>
+     <item row="4" column="1">
+      <layout class="QHBoxLayout" name="horizontalLayout">
+       <item>
+        <widget class="QRadioButton" name="radioButton_Medipix">
+         <property name="text">
+          <string>Medipix Mode</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QRadioButton" name="radioButton_Flatpanel">
+         <property name="text">
+          <string>Flatpanel Mode</string>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </item>
     </layout>
    </widget>
    <widget class="QLabel" name="file_path_label">
@@ -161,6 +179,19 @@
     </property>
     <property name="text">
      <string>File path: </string>
+    </property>
+   </widget>
+   <widget class="QLabel" name="label_Flatpanel">
+    <property name="geometry">
+     <rect>
+      <x>30</x>
+      <y>360</y>
+      <width>561</width>
+      <height>91</height>
+     </rect>
+    </property>
+    <property name="text">
+     <string/>
     </property>
    </widget>
   </widget>
