@@ -32,9 +32,11 @@ class MainWindow(QMainWindow, Ui_CT_controller):  # Class with the main window
         self.pushButton_set.released.connect(MainWindow.switch_window)
         self.lineEdit_steps.editingFinished.connect(self.check_even)
         self.up_pushButton.clicked.connect(lambda: (ConnectionWindow.servo.trial_angle_rotate("up",
-                                                    float(self.lineEdit_angle_trial.text()))))
+                                                                                              float(
+                                                                                                  self.lineEdit_angle_trial.text()))))
         self.down_pushButton.clicked.connect(lambda: (ConnectionWindow.servo.trial_angle_rotate("down",
-                                                      float(self.lineEdit_angle_trial.text()))))
+                                                                                                float(
+                                                                                                    self.lineEdit_angle_trial.text()))))
         self.actionReset_GRBL.triggered.connect(lambda: (ConnectionWindow.servo.command_sender(chr(24))))
         self.actionChoose_file_path.triggered.connect(self.get_path)
         self.lineEdit_vertical.setText(str(MainWindow.vertical))
@@ -116,7 +118,7 @@ class ProgressWindow(QMainWindow, Ui_Progress_window):
         self.label_detector_position.setText("Detector position: " + str(self.detector))
         self.label_object_position.setText("Object position: " + str(self.sample))
         self.label_vertical_position.setText("Vertical position: " + str(self.vertical))
-        self.label_magnification_ratio.setText("Magnification ratio: " + str(self.detector/self.sample))
+        self.label_magnification_ratio.setText("Magnification ratio: " + str(self.detector / self.sample))
 
         #  ProgressWindow.detector_type = detector_type
 
@@ -137,7 +139,6 @@ class UnlockWindow(QMainWindow, Ui_Unlocksystem):
 
 
 class ConnectionWindow(QMainWindow, Ui_Connection_parameters, Grbl):
-
     linear_port = Grbl.read_config("linear_stage", "port")[0]
     servo_port = Grbl.read_config("servo_stage", "port")[0]
     ensemble_IP = Grbl.read_config("ensemble", "IP")[0]
@@ -157,9 +158,9 @@ class ConnectionWindow(QMainWindow, Ui_Connection_parameters, Grbl):
         self.comboBox_linear.clear()
         self.comboBox_servo.clear()
         if ConnectionWindow.linear_port:
-            self.comboBox_linear.addItem('"Saved"'+ConnectionWindow.linear_port)
+            self.comboBox_linear.addItem('"Saved"' + ConnectionWindow.linear_port)
         if ConnectionWindow.servo_port:
-            self.comboBox_servo.addItem('"Saved"'+ConnectionWindow.servo_port)
+            self.comboBox_servo.addItem('"Saved"' + ConnectionWindow.servo_port)
         if Grbl.list_ports:
             self.comboBox_linear.addItems(Grbl.list_ports)
             self.comboBox_servo.addItems(Grbl.list_ports)
@@ -171,29 +172,31 @@ class ConnectionWindow(QMainWindow, Ui_Connection_parameters, Grbl):
 
     def connection(self):
         try:
-            ConnectionWindow.servo = Grbl((self.comboBox_linear.currentText()).
-                                          replace('"Saved"', ""), 115200, 2, "linear")
+            ConnectionWindow.servo = Grbl((self.comboBox_servo.currentText()).
+                                          replace('"Saved"', ""), 115200, 2, "servo")
             self.label_error_servo.clear()
             self.label_error_servo.setText("Correct servo connection")
             ConnectionWindow.servo_connected = True
         except ValueError as e:
             self.label_error_servo.setText(str(e))
         try:
-            ConnectionWindow.servo = Grbl((self.comboBox_servo.currentText()).
-                                          replace('"Saved"', ""), 115200, 2, "servo")
+            ConnectionWindow.linear = Grbl((self.comboBox_linear.currentText()).
+                                           replace('"Saved"', ""), 115200, 2, "linear")
             self.label_error_linear.clear()
             self.label_error_linear.setText("Correct linear connection")
             ConnectionWindow.linear_connected = True
         except ValueError as e:
             self.label_error_linear.setText(str(e))
-        if ConnectionWindow.linear_connected or ConnectionWindow.linear_connected:
+        if ConnectionWindow.linear_connected or ConnectionWindow.servo_connected:
             controller = Controller()
+            """
             if ConnectionWindow.linear.lock_state:
                 controller.show_unlock()
-            
+
             else:
                 controller.show_main()
-
+            """
+            controller.show_main()
             self.close()
             return True
         else:
