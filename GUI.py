@@ -13,24 +13,7 @@ print(Grbl.list_ports)
 
 
 class WorkerSignals(QObject):
-    """
-    Defines the signals available from a running worker thread.
 
-    Supported signals are:
-
-    finished
-        No data
-
-    error
-        tuple (exctype, value, traceback.format_exc() )
-
-    result
-        object data returned from processing, anything
-
-    progress
-        int indicating % progress
-
-    """
     finished = QtCore.pyqtSignal()
     error = QtCore.pyqtSignal(tuple)
     result = QtCore.pyqtSignal(object)
@@ -38,18 +21,6 @@ class WorkerSignals(QObject):
 
 
 class Worker(QRunnable):
-    """   Worker thread
-
-    Inherits from QRunnable to handler worker thread setup, signals and wrap-up.
-
-    :param callback: The function callback to run on this worker thread. Supplied args and
-                     kwargs will be passed through to the runner.
-    type callback: function.
-    :param args: Arguments to pass to the callback function
-    :param kwargs: Keywords to pass to the callback function
-
-    """
-
     def __init__(self, fn, *args, **kwargs):
         super(Worker, self).__init__()
 
@@ -64,24 +35,6 @@ class Worker(QRunnable):
 
     @pyqtSlot()
     def run(self):
-        """
-        Initialise the runner function with passed args, kwargs.
-        """
-
-        # Retrieve args/kwargs here; and fire processing using them
-
-        """
-        try:
-            result = self.fn(*self.args, **self.kwargs)
-        except:
-            traceback.print_exc()
-            exctype, value = sys.exc_info()[:2]
-            self.signals.error.emit((exctype, value, traceback.format_exc()))
-        else:
-            self.signals.result.emit(result)  # Return the result of the processing
-        finally:
-            self.signals.finished.emit()  # Done
-        """
         result = self.fn(*self.args, **self.kwargs)
         self.signals.result.emit(result)  # Return the result of the processing
         self.signals.finished.emit()  # Done
@@ -104,7 +57,6 @@ class ConnectionWindow(QMainWindow, Ui_Connection_parameters, Grbl):
         self.servo_connected = False
         self.linear_connected = False
         self.combobox()
-
         print("Multithreading with maximum %d threads" % self.threadpool.maxThreadCount())
 
     def combobox(self):
@@ -140,17 +92,17 @@ class ConnectionWindow(QMainWindow, Ui_Connection_parameters, Grbl):
         if self.linear_connected or self.servo_connected:
             print("Correct connection")
             print("servo is in:", self.servo.port)
-            self.close()
-
-            controller = Controller(MainWindow(self.servo, self.linear))
-            """
-            if self.linear.lock_state:
-                controller.show_unlock()
-
+            '''
+            if self.linear.lock_state or self.servo.lock_state:
+                controller = Controller(UnlockWindow(self.servo, self.linear))
+                controller.show_window()
             else:
-                controller.show_main()
-            """
-            controller.show_window()
+                controller = Controller(MainWindow(self.servo, self.linear))
+                controller.show_window()
+            '''
+            self.switch_window()
+
+            self.close()
             return True
         else:
             print("Incorrect connection")
@@ -167,10 +119,12 @@ class ConnectionWindow(QMainWindow, Ui_Connection_parameters, Grbl):
         #  worker.signals.result.connect(self.print_output)
         #  worker.signals.finished.connect(self.thread_complete)
         #  worker.signals.progress.connect(self.progress_fn)
+    def switch_window(self):
+        controller = Controller(MainWindow(self.servo, self.linear))
+        controller.show_window()
 
 
 class MainWindow(QMainWindow, Ui_CT_controller):  # Class with the main window
-
 
     def __init__(self, servo, linear):
         super().__init__()
@@ -190,8 +144,10 @@ class MainWindow(QMainWindow, Ui_CT_controller):  # Class with the main window
         self.servo = servo
         self.linear = linear
         self.lineEdit_steps.editingFinished.connect(self.check_even)
-        self.up_pushButton.clicked.connect(lambda: (self.trial_rot_worker("up", float(self.lineEdit_angle_trial.text()))))
-        self.down_pushButton.clicked.connect(lambda: (self.trial_rot_worker("down", float(self.lineEdit_angle_trial.text()))))
+        self.up_pushButton.clicked.connect(
+            lambda: (self.trial_rot_worker("up", float(self.lineEdit_angle_trial.text()))))
+        self.down_pushButton.clicked.connect(
+            lambda: (self.trial_rot_worker("down", float(self.lineEdit_angle_trial.text()))))
         self.pushButton_set.clicked.connect(self.linear_motion)
         self.pushButton_next.clicked.connect(self.switch_window)
         self.actionReset_GRBL.triggered.connect(lambda: (self.servo.command_sender(chr(24))))
@@ -210,6 +166,8 @@ class MainWindow(QMainWindow, Ui_CT_controller):  # Class with the main window
         elif self.detector_type == "Medipix":
             self.radioButton_Flatpanel.setChecked(False)
             self.radioButton_Medipix.setChecked(True)
+            self.threadpool = QThreadPool()
+        print("Multithreading with maximum %d threads" % self.threadpool.maxThreadCount())
 
     def check_even(self):  # Check the number of steps for each rotation, if not even increase it by one
         self.n_steps = int(self.lineEdit_steps.text())
@@ -245,8 +203,8 @@ class MainWindow(QMainWindow, Ui_CT_controller):  # Class with the main window
         self.up_pushButton.setEnabled(False)
         self.down_pushButton.setEnabled(False)
         self.lineEdit_angle_trial.setEnabled(False)
-        worker = Worker(self.servo.trial_angle_rotate(sense, advance))
-        worker.run()
+        worker = Worker(self.servo.trial_angle_rotate, sense, advance)
+        self.threadpool.start(worker)
         self.up_pushButton.setEnabled(True)
         self.down_pushButton.setEnabled(True)
         self.lineEdit_angle_trial.setEnabled(True)
@@ -287,11 +245,12 @@ class ProgressWindow(Ui_Progress_window, MainWindow):
         self.label_object_position.setText("Object position: " + str(self.sample))
         self.label_vertical_position.setText("Vertical position: " + str(self.vertical))
         self.label_magnification_ratio.setText("Magnification ratio: " + str(self.detector / self.sample))
+        self.threadpool = QThreadPool()
 
     def rotation_control_worker(self):
         self.pushButton_start_scan.setEnabled(False)
-        worker = Worker(self.servo.rotation_control(self.n_steps, self.dir_path, self.detector_type))
-        worker.run()
+        worker = Worker(self.servo.rotation_control, self.n_steps, self.dir_path, self.detector_type)
+        self.threadpool.start(worker)
         self.pushButton_start_scan.setEnabled(True)
 
 
@@ -304,10 +263,12 @@ class UnlockWindow(QMainWindow, Ui_Unlocksystem):
         self.pushButton_homing.pressed.connect(lambda: (ConnectionWindow.linear.command_sender("$H")))
         self.pushButton_homing.released.connect(self.switch)
         self.pushButton_override.pressed.connect(lambda: (ConnectionWindow.linear.command_sender("$X")))
-        self.pushButton_override.released.connect(self.switch)
+        self.pushButton_override.released.connect(self.switch_window)
 
-    def switch(self):
-        self.switch_window.emit()
+    @staticmethod
+    def switch_window():
+        controller = Controller(MainWindow)
+        controller.show_window()
 
 
 class Controller:
@@ -316,29 +277,6 @@ class Controller:
 
     def show_window(self):
         self.showing_window.show()
-
-
-"""
-class Controller:
-
-    def __init__(self):
-        self.connection = ConnectionWindow()
-        self.unlock = UnlockWindow()
-        self.window = MainWindow()
-        self.progress_window = ProgressWindow()
-
-    def show_connection(self):
-        self.connection.show()
-
-    def show_unlock(self):
-        self.unlock.show()
-
-    def show_main(self):
-        self.window.show()
-
-    def show_progress_window(self):
-        self.progress_window.show()
-"""
 
 
 def main():

@@ -47,7 +47,7 @@ class Grbl:
         self.start_msg = (self.connect.read(100)).decode()
         if self.motor == "servo" and "servo" not in self.start_msg:
             raise ValueError("Servo stage connected at linear")
-        if self.motor == "linear" and "servo" in self.start_msg:
+        elif self.motor == "linear" and "servo" in self.start_msg:
             raise ValueError("Linear stage connected at servo")
         if "'$H'|'$X' to unlock" in self.start_msg:  # If a part of the locked message is found
             self.lock_state = True
@@ -109,6 +109,7 @@ class Grbl:
             print(grbl_out)
             if "ok" not in grbl_out:
                 print(str(grbl_out)+"\n"+str(self.check_error(grbl_out)))
+            return grbl_out
 
         else:
             end_counter = 0
@@ -122,6 +123,11 @@ class Grbl:
                 if end_counter == 2:
                     print("Displacement completed")
                     break
+
+    def check_position(self):
+        position = self.command_sender("?").split("|").strip("MPos:").split(",")
+        pos_dict = {"X_pos": position[0], "Y_pos": position[1], "Z_pos": position[2]}
+        return pos_dict
 
     @staticmethod
     def check_new_file(file_path):  # Checks the number of files in the past path
@@ -165,12 +171,13 @@ class Grbl:
                     if str(button) == "Button.left" and pressed is False:
                         print("Click")
                         print(Grbl.clicks_counter)
+                        Grbl.clicks_counter += 1
                         if Grbl.clicks_counter == 1:
                             click_position = [x, y]
                             print(click_position)
                             listener.stop()
+                            Grbl.clicks_counter = 0
                             pass
-                        Grbl.clicks_counter += 1
                 with Listener(on_click=on_click) as listener:
                     listener.join()
             else:
