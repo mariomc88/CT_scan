@@ -9,5 +9,7 @@ printPgmString(PSTR("end\r\n")); being "end" the serial output we wait for to co
 once the rotation starts, and another one once it finishes, meaning we need to wait for the second of them). In the file config.h, the line 472
 #define ENABLE_SOFTWARE_DEBOUNCE // Default disabled. Uncomment to enable. was uncommented to enable the debounce, which in our case reduced drastically
 the number of readouts per trigger.
+In the file protocol.c, the lines 45 and 46 were commented out so that the system does not a start up check on the limits, since there is no use for that in the servo implementation.
+In the file report.c line 172, the welcome message is changed for the servo to include the word "servo" and thus not be mistaken with the linear axis.
 Each limit axis interrupt is mapped to the same function, meaning that in the current state, all would result in the same action. However, it can be 
 modified so that each of the interrupts result on a different action, if that was needed.
