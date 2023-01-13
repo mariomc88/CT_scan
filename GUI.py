@@ -21,14 +21,28 @@ from pynput.keyboard import Key
 
 class Grbl:
 
+    """
+    Description: Creates an object with the needed functionality for both
+    servo and stepper stages, using serial communication for the communication.
+
+        Args:
+            -port (string): serial communication port
+            -grbl_bitrate (string): serial bitrate
+            -timeout (string): timeout for serial communication (Does not apply
+            to all commands, see command_sender())
+            -motor (string): servo or linear
+    """
+
     settings = pd.read_csv("setting_codes_en_US.csv")  # Dataframe with description of available settings in GRBL
     alarms = pd.read_csv("alarm_codes_en_US.csv")  # Dataframe with description of alarm messages in GRBL
     errors = pd.read_csv("error_codes_en_US.csv")  # Dataframe with description of error messages in GRBL
-    list_ports = None
+    # Initialization of various class variables
+    list_serial_ports = None
+        #Both needed for flatpanel detector
     clicks_counter = 0
     click_position = []
-    servo_position = 0
-    files_count = 0
+    servo_position = 0 #Check_later, is it really needed? already defined in __init__
+    files_count = 0 #In selected directory for image recording
     stop_reading = False
 
     with open('config.yml') as f_read:  # Configuration file for parameters to be stored from session to session
@@ -43,6 +57,7 @@ class Grbl:
         self.lock_state = False
         self.motor = motor
         self.lock_state = False
+        #Postition initialization for motor type
         if self.motor == "servo":
             self.servo_position = 0
         elif self.motor == "linear":
@@ -51,6 +66,7 @@ class Grbl:
         try:
             print(self.port)
             self.connect = serial.Serial(self.port, self.grbl_bitrate, timeout=self.timeout)
+        #Code to cath possible reasons for not successful connection
         except serial.SerialException as e:
             error = int(e.args[0].split("(")[1].split(",")[0])
             print(error)
@@ -60,7 +76,6 @@ class Grbl:
                 raise ValueError("Zugriff verweigert: "+self.motor)
         self.start_msg = (self.connect.read(100)).decode()
         if self.motor == "servo" and "servo" not in self.start_msg:
-            print("servo_fault: ", self.start_msg)
             raise ValueError("Servo stage connected at linear")
         elif self.motor == "linear" and "servo" in self.start_msg:
             raise ValueError("Linear stage connected at servo")
@@ -96,49 +111,23 @@ class Grbl:
                 result.append(port)
             except (OSError, serial.SerialException):
                 pass
-        Grbl.list_ports = result
-        # return result
+        Grbl.list_serial_ports = result
 
-    @staticmethod
-    def read_non_blocking(connection, read_until=""):
-        data_str = ""
-        counter = 0
-        if connection.timeout:
-            timeout = connection.timeout / 0.01
-        else:
-            timeout = 0
-        while connection.is_open:
-            if Grbl.stop_reading:
-                connection.write(b"!")
-                #  connection.close()
-                raise NotImplementedError("Stop reading")
-            if connection.in_waiting > 0:
-                data_str += connection.read(connection.in_waiting).decode('ascii')
-            else:
-                counter += 1
-                if (timeout and counter > timeout) or (read_until and read_until in data_str):
-                    return data_str
-                time.sleep(0.01)
+    def command_sender(self, command, ack=""):
+        """
+        Description: send the Gcode command to the desired Grbl board, servo or linear
 
-    @staticmethod
-    def check_error(error_message):  # Check the description for the corresponding alarm or error code
-        if "ALARM" in error_message:
-            alarm_code = error_message.split("ALARM:")[-1][0]
-            alarm_description = Grbl.alarms.loc[Grbl.alarms['Alarm Code in v1.1+'] ==
-                                                int(alarm_code)][" Alarm Description"].values[0]
-            return alarm_description
-        if "error" in error_message:
-            error_code = error_message.split(":")[-1]
-            error_description = Grbl.errors.loc[Grbl.errors['Error Code in v1.1+ '] ==
-                                                int(error_code)][" Error Description"].values[0]
-            return error_description
-        else:
-
-            print("No response received from command")
-
-    def command_sender(self, command, ack=""):  # The acknowledgment will be "ok" for linear movements
-        # or "end" for rotational movements.
-        # Function to send the GCode commands to the board, the number of arguments passed to it
+            Args:
+                -command (string): Gcode command to be sent
+                -ack (string): response to expect from the board confirming the
+                success of the operation. When sending commands non needing
+                confirmation, this field is left empty.
+            Returns:
+                - True for a successful execution
+                - grbl_out for an empty ack command, representing the error from
+                the board
+                - False for a unsuccesful execution
+        """
         command = (command + "\n").encode()
         self.connect.reset_input_buffer()
         self.connect.write(command)
@@ -153,44 +142,126 @@ class Grbl:
             return grbl_out
 
         else:
-            self.connect.timeout = 120
+            self.connect.timeout = 120 #To account for long homing or displacements
             while True:
-                #  grbl_out = self.connect.read_until(ack.encode()).decode()
                 grbl_out = self.read_non_blocking(self.connect, ack)
                 print(grbl_out)
                 if ack in grbl_out:
                     print("Displacement completed")
-                    self.connect.timeout = 2
+                    self.connect.timeout = 2 #Restore default timeout, check later
                     return True
                 else:
                     print("No terminating character received")
-                    return False
+                    return False #Check_later, should grbl_out also be returned?
+
+    @staticmethod
+    def read_non_blocking(connection, read_until=""):
+        """
+        Description: thread friendly serial messsage sender, allows the
+        terminaiton of the execution thread when Grbl.stop_reading == True
+
+            Args:
+                -connection (pyserial connection object): pyserial object already
+                initialized
+                -read_until (string): what acknowledgment message to expect
+        """
+        data_str = ""
+        counter = 0
+        if connection.timeout:
+            timeout = connection.timeout / 0.01
+        else:
+            timeout = 0
+        while connection.is_open:
+            if Grbl.stop_reading: #Variable state changes to True when an
+            #"emergency_stop" is issued by the user, see ProgressWindow.stop_reading
+                connection.write(b"!") #Stop executing commands
+                #  connection.close()
+                raise NotImplementedError("Stop reading")
+            if connection.in_waiting > 0: #Message received to buffer
+                data_str += connection.read(connection.in_waiting).decode('ascii')
+            else:
+                counter += 1
+                if (timeout and counter > timeout) or (read_until and read_until in data_str):
+                    return data_str
+                time.sleep(0.01)
+
+    @staticmethod
+    def check_error(error_message):
+        """
+        Description: Retrieve the complete description of the error or alarm code"
+
+            Args:
+                -error_message(string): unexpected response from the grbl board
+            Returns:
+                -alarm_description (string)
+                -error_description (string)
+        """
+        if "ALARM" in error_message:
+            alarm_code = error_message.split("ALARM:")[-1][0]
+            alarm_description = Grbl.alarms.loc[Grbl.alarms['Alarm Code in v1.1+'] ==
+                                                int(alarm_code)][" Alarm Description"].values[0]
+            return alarm_description
+        if "error" in error_message:
+            error_code = error_message.split(":")[-1]
+            error_description = Grbl.errors.loc[Grbl.errors['Error Code in v1.1+ '] ==
+                                                int(error_code)][" Error Description"].values[0]
+            return error_description
+        else:
+
+            print("No response received from command")
 
     def check_position(self):
+        """
+        Description: Retrieve position and wco (work coordinates offset) of the setup
+
+            Returns:
+                -pos_dict(dict): containing the machine position corrected with the wco values.
+        """
         position_report = self.command_sender("?")
         wco = position_report.split("WCO")[1].strip("WCO:").split(">")[0].split(",")
         wco_dict = {"X_co": float(wco[0]), "Y_co": float(wco[1]), "Z_co": float(wco[2])}
-        self.linear_wco = wco_dict
+        if wco_dict:
+            self.linear_wco = wco_dict #Save wco value
         position = position_report.split("MPos")[1].split("|")[0].strip("MPos:").split(">")[0].split(",")
-        pos_dict = {"X": float(position[0]) - wco_dict["X_co"], "Y": float(position[1]) - wco_dict["Y_co"],
-                    "Z": float(position[2]) - wco_dict["Z_co"]}
+        # If MPos: is given, use WPos = MPos - WCO
+        pos_dict = {"X": float(position[0]) - self.linear_wco["X_co"], "Y": float(position[1]) - self.linear_wco["Y_co"],
+                    "Z": float(position[2]) - self.linear_wco["Z_co"]}
 
         return pos_dict
 
     @staticmethod
-    def check_new_file(file_path):  # Checks the number of files in the past path
+    def check_new_file(file_path):
+        """
+        Description: checks the number of files in the past path
+
+            Returns: number of files in the folder
+        """
         return len([name for name in os.listdir(file_path) if os.path.isfile(os.path.join(file_path, name))])
 
     @staticmethod
-    def read_config(*args):  # Reads and returns the value stored in the config file for a passed parameter
+    def read_config(*args):
+        """
+        Description: reads and returns the value stored in the config file for a passed parameter
+
+            Args: Field to check in .yaml configuration file, with the last value
+            being the key
+
+            Returns:
+                -output: value of specified field
+                -Grbl.config: complete configuration file
+                -args_tup: tuple with the specified fields
+                -key
+        """
         key = args[-1]
         args_tup = tuple(args)
         output = Grbl.config[args_tup[0]][key]
         return output, Grbl.config, args_tup, key
-        # print(read_config("file_path", "route")[0])
 
     @staticmethod
-    def write_config(*args, new_value=""):  # Rewrite value for a passed parameter
+    def write_config(*args, new_value=""):
+        """
+        Description: rewrite value for a passed parameter
+        """
         #  global config Check this
         old_value, Grbl.config, args_tup, key = Grbl.read_config(*args)
         if old_value != new_value:
@@ -199,25 +270,26 @@ class Grbl:
                 yaml.dump(Grbl.config, f_write)
             f_write.close()
 
-    def trial_angle_rotate(self, sense, advance, mm_per_rot, servo):  # Rotation steps for the trial menu
+    def trial_angle_rotate(self, sense, advance, mm_per_rot, servo): #Check_later consider moving to the MainWindow class
+        """
+        Description: send appropiate Gcode message to the grbl servo board
+
+                    Args:
+                        -sense (string): up or down
+                        -advance (float): degrees to rotate
+                        -mm_per_rot (float): conversion constant from degrees to mm
+        """
         Grbl.write_config("ct_config", "Trials angle", new_value=advance)
         if sense == "up":
             servo.servo_position += advance/360*mm_per_rot
-            #  successful = self.command_sender(command="G0 Z"+str(servo.servo_position), ack="end") No end
             self.command_sender(command="G0 Z" + str(servo.servo_position))
         else:
             servo.servo_position -= advance/360*mm_per_rot
-            #  successful = self.command_sender(command="G0 Z"+str(servo.servo_position), ack="end")  No end
             self.command_sender(command="G0 Z" + str(servo.servo_position))
-        #  print("Command successful: ", successful) No end
-        #  return successful No end
-
-        # self.label_current_angle.setText("Current angle: "+str(MainWindow.servo_position))
-        # self.show()
 
 
-Grbl.serial_ports()
-print(Grbl.list_ports)
+Grbl.serial_ports() #Check_later, shouldn't it go in the main() function?
+print(Grbl.list_serial_ports)
 
 
 class WorkerSignals(QObject):
@@ -278,16 +350,16 @@ class ConnectionWindow(QMainWindow, Ui_Connection_parameters, Grbl):
         #  print("Multithreading with maximum %d threads" % self.threadpool.maxThreadCount())
 
     def combobox(self):
-        print("Serial ports available:", len(Grbl.list_ports))
+        print("Serial ports available:", len(Grbl.list_serial_ports))
         self.comboBox_linear.clear()
         self.comboBox_servo.clear()
         if self.linear_port:
             self.comboBox_linear.addItem('"Saved"' + self.linear_port)
         if self.servo_port:
             self.comboBox_servo.addItem('"Saved"' + self.servo_port)
-        if Grbl.list_ports:
-            self.comboBox_linear.addItems(Grbl.list_ports)
-            self.comboBox_servo.addItems(Grbl.list_ports)
+        if Grbl.list_serial_ports:
+            self.comboBox_linear.addItems(Grbl.list_serial_ports)
+            self.comboBox_servo.addItems(Grbl.list_serial_ports)
         if self.ensemble_IP:
             self.lineEdit_ens_IP.setText(self.ensemble_IP)
         if self.ensemble_port:
@@ -438,7 +510,7 @@ class MainWindow(QMainWindow, Ui_CT_controller):  # Class with the main window
         if float(self.sample):
             self.linear.linear_position["Y"] = self.sample
         """self.vertical = float(self.lineEdit_vertical.text())
-        
+
         Grbl.write_config("ct_config", "Object vertical position", new_value=str(self.vertical))
         if float(self.vertical):
             self.linear.linear_position["Z"] = self.vertical"""
@@ -446,6 +518,9 @@ class MainWindow(QMainWindow, Ui_CT_controller):  # Class with the main window
         self.update_linear_position()
 
     def get_path(self):  # Choose the path from the dropdown menu
+        """
+        Description: set the path for the recorded images to be saved
+        """
         self.dir_path = QFileDialog.getExistingDirectory(self, "Choose Directory", self.dir_path)
         self.file_path_label.setText("File path: " + str(self.dir_path))
         Grbl.write_config("file_path", "route", new_value=str(self.dir_path))
