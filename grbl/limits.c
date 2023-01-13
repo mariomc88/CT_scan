@@ -119,12 +119,14 @@ uint8_t limits_get_state()
         #ifdef HARD_LIMIT_FORCE_STATE_CHECK
           // Check limit pin state.
           if (limits_get_state()) {
-            mc_reset(); // Initiate system kill.
-            system_set_exec_alarm(EXEC_ALARM_HARD_LIMIT); // Indicate hard limit critical event
+            //mc_reset(); // Initiate system kill.
+            //system_set_exec_alarm(EXEC_ALARM_HARD_LIMIT); // Indicate hard limit critical event
+            printPgmString(PSTR("end\r\n"));
           }
         #else
-          mc_reset(); // Initiate system kill.
-          system_set_exec_alarm(EXEC_ALARM_HARD_LIMIT); // Indicate hard limit critical event
+          //mc_reset(); // Initiate system kill.
+          //system_set_exec_alarm(EXEC_ALARM_HARD_LIMIT); // Indicate hard limit critical event
+            printPgmString(PSTR("end\r\n"));
         #endif
       }
     }
@@ -139,8 +141,9 @@ uint8_t limits_get_state()
       if (!(sys_rt_exec_alarm)) {
         // Check limit pin state. 
         if (limits_get_state()) {
-          mc_reset(); // Initiate system kill.
-          system_set_exec_alarm(EXEC_ALARM_HARD_LIMIT); // Indicate hard limit critical event
+          //mc_reset(); // Initiate system kill.
+          //system_set_exec_alarm(EXEC_ALARM_HARD_LIMIT); // Indicate hard limit critical event
+            printPgmString(PSTR("end\r\n"));
         }
       }  
     }
