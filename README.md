@@ -1,15 +1,15 @@
 # CT_scan
-The project includes the files needed to run the PyQT5 script that runs the GUI used for the control of a CT scan. The projects bases itself on the 
-stream.py example code in the grbl 1.1 repository https://github.com/gnea/grbl. The .csv files included are also found there under the doc folder.
+The project includes the files needed to run the PyQT5 script that runs the GUI used for the control of a CT scan. The projects bases itself on the
+stream.py example code in the grbl 1.1 repository https://github.com/gnea/grbl. The .csv files included are also found there under the doc folder. trial add
 
-Slight modification were done to the source code in order to capture the "end of rotation" trigger signal emitted by the servo motor controller. As the 
-implementation lacks any added features which would allow the use of a pin for input, the axis limit pins will be used. 
-In the file limits.c from te line 109 to the 151, the lines with the code: mc_reset(); system_set_exec_alarm(EXEC_ALARM_HARD_LIMIT); were replaced by 
+Slight modification were done to the source code in order to capture the "end of rotation" trigger signal emitted by the servo motor controller. As the
+implementation lacks any added features which would allow the use of a pin for input, the axis limit pins will be used.
+In the file limits.c from te line 109 to the 151, the lines with the code: mc_reset(); system_set_exec_alarm(EXEC_ALARM_HARD_LIMIT); were replaced by
 printPgmString(PSTR("end\r\n")); being "end" the serial output we wait for to confirm the end of the rotation (In our case, the driver sends one trigger
 once the rotation starts, and another one once it finishes, meaning we need to wait for the second of them). In the file config.h, the line 472
 #define ENABLE_SOFTWARE_DEBOUNCE // Default disabled. Uncomment to enable. was uncommented to enable the debounce, which in our case reduced drastically
 the number of readouts per trigger.
 In the file protocol.c, the lines 45 and 46 were commented out so that the system does not a start up check on the limits, since there is no use for that in the servo implementation.
 In the file report.c line 172, the welcome message is changed for the servo to include the word "servo" and thus not be mistaken with the linear axis.
-Each limit axis interrupt is mapped to the same function, meaning that in the current state, all would result in the same action. However, it can be 
+Each limit axis interrupt is mapped to the same function, meaning that in the current state, all would result in the same action. However, it can be
 modified so that each of the interrupts result on a different action, if that was needed.
