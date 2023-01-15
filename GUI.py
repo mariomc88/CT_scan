@@ -38,11 +38,11 @@ class Grbl:
     errors = pd.read_csv("error_codes_en_US.csv")  # Dataframe with description of error messages in GRBL
     # Initialization of various class variables
     list_serial_ports = None
-        #Both needed for flatpanel detector
+    # Both needed for flatpanel detector
     clicks_counter = 0
     click_position = []
-    servo_position = 0 #Check_later, is it really needed? already defined in __init__
-    files_count = 0 #In selected directory for image recording
+    servo_position = 0  # Check_later, is it really needed? already defined in __init__
+    files_count = 0  # In selected directory for image recording
     stop_reading = False
 
     with open('config.yml') as f_read:  # Configuration file for parameters to be stored from session to session
@@ -57,7 +57,7 @@ class Grbl:
         self.lock_state = False
         self.motor = motor
         self.lock_state = False
-        #Postition initialization for motor type
+        # Postition initialization for motor type
         if self.motor == "servo":
             self.servo_position = 0
         elif self.motor == "linear":
@@ -66,7 +66,7 @@ class Grbl:
         try:
             print(self.port)
             self.connect = serial.Serial(self.port, self.grbl_bitrate, timeout=self.timeout)
-        #Code to cath possible reasons for not successful connection
+        # Code to cath possible reasons for not successful connection
         except serial.SerialException as e:
             error = int(e.args[0].split("(")[1].split(",")[0])
             print(error)
@@ -76,7 +76,8 @@ class Grbl:
                 raise ValueError("Zugriff verweigert: "+self.motor)
         self.start_msg = (self.connect.read(100)).decode()
         if self.motor == "servo" and "servo" not in self.start_msg:
-            raise ValueError("Servo stage connected at linear")
+            raise ValueError("Servo stage connected at linear")  # Check_later, empty message comes also
+            # as servo stage connected at linear
         elif self.motor == "linear" and "servo" in self.start_msg:
             raise ValueError("Linear stage connected at servo")
         if "'$H'|'$X' to unlock" in self.start_msg:  # If a part of the locked message is found
@@ -142,17 +143,17 @@ class Grbl:
             return grbl_out
 
         else:
-            self.connect.timeout = 120 #To account for long homing or displacements
+            self.connect.timeout = 120  # To account for long homing or displacements
             while True:
                 grbl_out = self.read_non_blocking(self.connect, ack)
                 print(grbl_out)
                 if ack in grbl_out:
                     print("Displacement completed")
-                    self.connect.timeout = 2 #Restore default timeout, check later
+                    self.connect.timeout = 2  # Restore default timeout, check later
                     return True
                 else:
                     print("No terminating character received")
-                    return False #Check_later, should grbl_out also be returned?
+                    return False  # Check_later, should grbl_out also be returned?
 
     @staticmethod
     def read_non_blocking(connection, read_until=""):
@@ -161,8 +162,7 @@ class Grbl:
         terminaiton of the execution thread when Grbl.stop_reading == True
 
             Args:
-                -connection (pyserial connection object): pyserial object already
-                initialized
+                -connection (pyserial connection object): pyserial object already initialized
                 -read_until (string): what acknowledgment message to expect
         """
         data_str = ""
@@ -172,12 +172,12 @@ class Grbl:
         else:
             timeout = 0
         while connection.is_open:
-            if Grbl.stop_reading: #Variable state changes to True when an
-            #"emergency_stop" is issued by the user, see ProgressWindow.stop_reading
-                connection.write(b"!") #Stop executing commands
+            if Grbl.stop_reading:  # Variable state changes to True when an
+                # "emergency_stop" is issued by the user, see ProgressWindow.stop_reading
+                connection.write(b"!")  # Stop executing commands
                 #  connection.close()
                 raise NotImplementedError("Stop reading")
-            if connection.in_waiting > 0: #Message received to buffer
+            if connection.in_waiting > 0:  # Message received to buffer
                 data_str += connection.read(connection.in_waiting).decode('ascii')
             else:
                 counter += 1
@@ -221,11 +221,11 @@ class Grbl:
         wco = position_report.split("WCO")[1].strip("WCO:").split(">")[0].split(",")
         wco_dict = {"X_co": float(wco[0]), "Y_co": float(wco[1]), "Z_co": float(wco[2])}
         if wco_dict:
-            self.linear_wco = wco_dict #Save wco value
+            self.linear_wco = wco_dict  # Save wco value
         position = position_report.split("MPos")[1].split("|")[0].strip("MPos:").split(">")[0].split(",")
         # If MPos: is given, use WPos = MPos - WCO
-        pos_dict = {"X": float(position[0]) - self.linear_wco["X_co"], "Y": float(position[1]) - self.linear_wco["Y_co"],
-                    "Z": float(position[2]) - self.linear_wco["Z_co"]}
+        pos_dict = {"X": float(position[0]) - self.linear_wco["X_co"], "Y": float(position[1]) -
+                    self.linear_wco["Y_co"], "Z": float(position[2]) - self.linear_wco["Z_co"]}
 
         return pos_dict
 
@@ -270,7 +270,8 @@ class Grbl:
                 yaml.dump(Grbl.config, f_write)
             f_write.close()
 
-    def trial_angle_rotate(self, sense, advance, mm_per_rot, servo): #Check_later consider moving to the MainWindow class
+    def trial_angle_rotate(self, sense, advance, mm_per_rot, servo):  # Check_later consider moving to the MainWindow
+        # class
         """
         Description: send appropiate Gcode message to the grbl servo board
 
@@ -288,11 +289,14 @@ class Grbl:
             self.command_sender(command="G0 Z" + str(servo.servo_position))
 
 
-Grbl.serial_ports() #Check_later, shouldn't it go in the main() function?
+Grbl.serial_ports()  # Check_later, shouldn't it go in the main() function?
 print(Grbl.list_serial_ports)
 
 
 class WorkerSignals(QObject):
+    """
+    Description: Class defining the pyqtsignals and it's type
+    """
 
     finished = QtCore.pyqtSignal()
     error = QtCore.pyqtSignal(str)
@@ -301,6 +305,9 @@ class WorkerSignals(QObject):
 
 
 class Worker(QRunnable):
+    """
+    Description: Class which initializes the QThread worker
+    """
     def __init__(self, fn, *args, **kwargs):
         super(Worker, self).__init__()
 
@@ -311,7 +318,7 @@ class Worker(QRunnable):
         self.signals = WorkerSignals()
 
         # Add the callback to our kwargs
-        if "rotation_control" in str(self.fn):
+        if "rotation_control" in str(self.fn):  # As the progresss signal is only needed for this thread
             self.kwargs['progress_callback'] = self.signals.progress
 
     @pyqtSlot()
@@ -320,57 +327,66 @@ class Worker(QRunnable):
             result = self.fn(*self.args, **self.kwargs)
             self.signals.result.emit(result)  # Return the result of the processing
             self.signals.finished.emit()  # Done
-        except NotImplementedError:
+        except NotImplementedError:  # Captures the termination process for the command_sender()
             self.signals.finished.emit()
-            self.signals.error.emit("Close all")
+            self.signals.error.emit("Close all")  # Check_later, shouldn't this also be implemented for linear movement?
 
 
 class ConnectionWindow(QMainWindow, Ui_Connection_parameters, Grbl):
-
+    """
+    Definition: This class executes the GUI window that prompts the user to
+    choose the connection details for the different stages, had the saved ones
+    not worked
+    """
     controller_MainWindow = None
 
     def __init__(self):
         super().__init__()
-        #  QtWidgets.QApplication.__init__(self,)
         self.setupUi(self)
         self.pushButton_check.clicked.connect(self.connection_worker)
         self.linear_port = Grbl.read_config("linear_stage", "port")[0]
         self.servo_port = Grbl.read_config("servo_stage", "port")[0]
         self.ensemble_IP = Grbl.read_config("ensemble", "IP")[0]
-
         self.ensemble_port = Grbl.read_config("ensemble", "port")[0]
         self.linear = None
         self.servo = None
         self.servo_connected = False
         self.linear_connected = False
         self.combobox()
-        #  self.thread = None
         self.worker = None
         self.threadpool = QThreadPool()
-        #  print("Multithreading with maximum %d threads" % self.threadpool.maxThreadCount())
 
     def combobox(self):
+        """
+        Description: drop down menus for each stage connection parameters selection
+        """
         print("Serial ports available:", len(Grbl.list_serial_ports))
         self.comboBox_linear.clear()
         self.comboBox_servo.clear()
         if self.linear_port:
-            self.comboBox_linear.addItem('"Saved"' + self.linear_port)
+            self.comboBox_linear.addItem('"Saved"' + self.linear_port)  # Add predetermined port
         if self.servo_port:
-            self.comboBox_servo.addItem('"Saved"' + self.servo_port)
+            self.comboBox_servo.addItem('"Saved"' + self.servo_port)  # Add predetermined port
         if Grbl.list_serial_ports:
             self.comboBox_linear.addItems(Grbl.list_serial_ports)
             self.comboBox_servo.addItems(Grbl.list_serial_ports)
-        if self.ensemble_IP:
+        if self.ensemble_IP:  # Check_later, shouldn't this also include a predetermined IP?
             self.lineEdit_ens_IP.setText(self.ensemble_IP)
         if self.ensemble_port:
             self.lineEdit_ens_port.setText(self.ensemble_port)
 
     def connection(self):
+        """
+        Description: Stablish connection with the serial stages and capture and
+        return the possible errors during the process.
+
+            Returns True if both the connections were correct.
+        """
         try:
             selected_servo_port = self.comboBox_servo.currentText().replace('"Saved"', "")
             self.servo = Grbl(selected_servo_port, 115200, 2, "servo")
             if self.servo_port != selected_servo_port:
-                Grbl.write_config("servo_stage", "port", new_value=selected_servo_port)
+                Grbl.write_config("servo_stage", "port", new_value=selected_servo_port)  # Save new succesful port
             self.label_error_servo.clear()
             self.label_error_servo.setText("Correct servo connection")
             self.servo_connected = True
@@ -380,7 +396,7 @@ class ConnectionWindow(QMainWindow, Ui_Connection_parameters, Grbl):
             selected_linear_port = self.comboBox_linear.currentText().replace('"Saved"', "")
             self.linear = Grbl(selected_linear_port, 115200, 2, "linear")
             if self.linear_port != selected_linear_port:
-                Grbl.write_config("linear_stage", "port", new_value=selected_linear_port)
+                Grbl.write_config("linear_stage", "port", new_value=selected_linear_port)  # Save new succesful port
             self.label_error_linear.clear()
             self.label_error_linear.setText("Correct linear connection")
             self.linear_connected = True
@@ -395,11 +411,15 @@ class ConnectionWindow(QMainWindow, Ui_Connection_parameters, Grbl):
             elif self.linear_connected:
                 self.linear.connect.close()
             print("Incorrect connection")
-            Grbl.serial_ports()
+            Grbl.serial_ports()  # Refresh available ports
             self.combobox()
             return False
 
     def switch_window(self, connection):
+        """
+        Description: switches to next window, UnlockWindow if the Grbl board
+        is in lock state or directly to the main window if not.
+        """
         if connection:
 
             if self.linear.lock_state:
@@ -411,6 +431,9 @@ class ConnectionWindow(QMainWindow, Ui_Connection_parameters, Grbl):
             self.close()
 
     def connection_worker(self):
+        """
+        Description: starts a thread to execute the connection() funtion
+        """
         self.pushButton_check.setEnabled(False)
         self.worker = Worker(self.connection)
         self.worker.signals.result.connect(self.switch_window)
@@ -425,12 +448,19 @@ class ConnectionWindow(QMainWindow, Ui_Connection_parameters, Grbl):
 
 
 class MainWindow(QMainWindow, Ui_CT_controller):  # Class with the main window
+    """
+    Description: Includes the GUI and funcitons for the main GUI, which allows
+    for setting the different parameters prior to the scan.
 
+        Args:
+            - servo(Grbl object): Grbl object with the connection parameters and
+            methods of the servo motor
+            - linear(Grbl object): Grbl object with the connection parameters and
+            methods of the linnear motor
+    """
     def __init__(self, servo, linear):
         super().__init__()
-        #  QtWidgets.QApplication.__init__(self)
-        # Set up window widgets
-        #  definition of needed variables in the class
+        # Read predefined parameters
         self.n_steps = int(Grbl.read_config("ct_config", "Angles per rotation")[0])
         self.trial_rot = float(Grbl.read_config("ct_config", "Trials angle")[0])
         self.dir_path = str(Grbl.read_config("file_path", "route")[0])
@@ -438,14 +468,15 @@ class MainWindow(QMainWindow, Ui_CT_controller):  # Class with the main window
         self.sample = float(Grbl.read_config("ct_config", "Distance Source object")[0])
         self.vertical = float(Grbl.read_config("ct_config", "Object vertical position")[0])
         self.detector_type = str(Grbl.read_config("ct_config", "Detector type")[0])
-        self.mm_per_rot = 360
+        self.mm_per_rot = 360  # Conversion from degrees to mm
         self.files_count = 0
         self.setupUi(self)
         self.servo = servo
         self.linear = linear
         self.linear.linear_position = self.linear.check_position()
-        self.update_linear_position()
-        self.lineEdit_steps.editingFinished.connect(self.check_even)
+        self.update_linear_position()  # Check for linear stage working position and wco
+        self.lineEdit_steps.editingFinished.connect(self.check_even)  # Once the value of steps is introduced, check if
+        # it is an even number
         self.up_pushButton.clicked.connect(
             lambda: (self.trial_rot_worker("up", float(self.lineEdit_angle_trial.text()))))
         self.down_pushButton.clicked.connect(
