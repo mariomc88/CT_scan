@@ -38,7 +38,7 @@ class Grbl:
     errors = pd.read_csv("error_codes_en_US.csv")  # Dataframe with description of error messages in GRBL
     # Initialization of various class variables
     list_serial_ports = None
-    # Both needed for flatpanel detector
+    # Both needed for flatpanel detector, check_later, are they really needed? Also implemented in ProgressWindow class
     clicks_counter = 0
     click_position = []
     servo_position = 0  # Check_later, is it really needed? already defined in __init__
@@ -57,7 +57,7 @@ class Grbl:
         self.lock_state = False
         self.motor = motor
         self.lock_state = False
-        # Postition initialization for motor type
+        # Position initialization for motor type
         if self.motor == "servo":
             self.servo_position = 0
         elif self.motor == "linear":
@@ -127,7 +127,7 @@ class Grbl:
                 - True for a successful execution
                 - grbl_out for an empty ack command, representing the error from
                 the board
-                - False for a unsuccesful execution
+                - False for an unsuccessful execution
         """
         command = (command + "\n").encode()
         self.connect.reset_input_buffer()
@@ -158,8 +158,8 @@ class Grbl:
     @staticmethod
     def read_non_blocking(connection, read_until=""):
         """
-        Description: thread friendly serial messsage sender, allows the
-        terminaiton of the execution thread when Grbl.stop_reading == True
+        Description: thread friendly serial message sender, allows the
+        termination of the execution thread when Grbl.stop_reading == True
 
             Args:
                 -connection (pyserial connection object): pyserial object already initialized
@@ -188,7 +188,7 @@ class Grbl:
     @staticmethod
     def check_error(error_message):
         """
-        Description: Retrieve the complete description of the error or alarm code"
+        Description: Retrieve the complete description of the error or alarm code
 
             Args:
                 -error_message(string): unexpected response from the grbl board
@@ -273,7 +273,7 @@ class Grbl:
     def trial_angle_rotate(self, sense, advance, mm_per_rot, servo):  # Check_later consider moving to the MainWindow
         # class
         """
-        Description: send appropiate Gcode message to the grbl servo board
+        Description: send appropriate Gcode message to the grbl servo board
 
                     Args:
                         -sense (string): up or down
@@ -318,7 +318,7 @@ class Worker(QRunnable):
         self.signals = WorkerSignals()
 
         # Add the callback to our kwargs
-        if "rotation_control" in str(self.fn):  # As the progresss signal is only needed for this thread
+        if "rotation_control" in str(self.fn):  # As the progress signal is only needed for this thread
             self.kwargs['progress_callback'] = self.signals.progress
 
     @pyqtSlot()
@@ -377,7 +377,7 @@ class ConnectionWindow(QMainWindow, Ui_Connection_parameters, Grbl):
 
     def connection(self):
         """
-        Description: Stablish connection with the serial stages and capture and
+        Description: establish connection with the serial stages and capture and
         return the possible errors during the process.
 
             Returns True if both the connections were correct.
@@ -386,7 +386,7 @@ class ConnectionWindow(QMainWindow, Ui_Connection_parameters, Grbl):
             selected_servo_port = self.comboBox_servo.currentText().replace('"Saved"', "")
             self.servo = Grbl(selected_servo_port, 115200, 2, "servo")
             if self.servo_port != selected_servo_port:
-                Grbl.write_config("servo_stage", "port", new_value=selected_servo_port)  # Save new succesful port
+                Grbl.write_config("servo_stage", "port", new_value=selected_servo_port)  # Save new successful port
             self.label_error_servo.clear()
             self.label_error_servo.setText("Correct servo connection")
             self.servo_connected = True
@@ -396,7 +396,7 @@ class ConnectionWindow(QMainWindow, Ui_Connection_parameters, Grbl):
             selected_linear_port = self.comboBox_linear.currentText().replace('"Saved"', "")
             self.linear = Grbl(selected_linear_port, 115200, 2, "linear")
             if self.linear_port != selected_linear_port:
-                Grbl.write_config("linear_stage", "port", new_value=selected_linear_port)  # Save new succesful port
+                Grbl.write_config("linear_stage", "port", new_value=selected_linear_port)  # Save new successful port
             self.label_error_linear.clear()
             self.label_error_linear.setText("Correct linear connection")
             self.linear_connected = True
@@ -432,7 +432,7 @@ class ConnectionWindow(QMainWindow, Ui_Connection_parameters, Grbl):
 
     def connection_worker(self):
         """
-        Description: starts a thread to execute the connection() funtion
+        Description: starts a thread to execute the connection() function
         """
         self.pushButton_check.setEnabled(False)
         self.worker = Worker(self.connection)
@@ -449,14 +449,14 @@ class ConnectionWindow(QMainWindow, Ui_Connection_parameters, Grbl):
 
 class MainWindow(QMainWindow, Ui_CT_controller):  # Class with the main window
     """
-    Description: Includes the GUI and funcitons for the main GUI, which allows
+    Description: Includes the GUI and functions for the main GUI, which allows
     for setting the different parameters prior to the scan.
 
         Args:
             - servo(Grbl object): Grbl object with the connection parameters and
             methods of the servo motor
             - linear(Grbl object): Grbl object with the connection parameters and
-            methods of the linnear motor
+            methods of the linear motor
     """
     def __init__(self, servo, linear):
         super().__init__()
@@ -478,7 +478,8 @@ class MainWindow(QMainWindow, Ui_CT_controller):  # Class with the main window
         self.lineEdit_steps.editingFinished.connect(self.check_even)  # Once the value of steps is introduced, check if
         # it is an even number
         self.up_pushButton.clicked.connect(
-            lambda: (self.trial_rot_worker("up", float(self.lineEdit_angle_trial.text()))))
+            lambda: (self.trial_rot_worker("up", float(self.lineEdit_angle_trial.text()))))  # Check_later, why not just
+        # pass + and - instead of up and down or "" and "-" where + not to work
         self.down_pushButton.clicked.connect(
             lambda: (self.trial_rot_worker("down", float(self.lineEdit_angle_trial.text()))))
         self.vert_up_pushButton.clicked.connect(
@@ -507,7 +508,7 @@ class MainWindow(QMainWindow, Ui_CT_controller):  # Class with the main window
             self.radioButton_Flatpanel.setChecked(False)
             self.radioButton_Medipix.setChecked(True)
             self.radioButton_Trial_Mode.setChecked(False)
-        elif self.detector_type == "Trial":
+        elif self.detector_type == "Trial":  # Do not assume trial mode will be preferred again
             self.radioButton_Flatpanel.setChecked(False)
             self.radioButton_Medipix.setChecked(False)
             self.radioButton_Trial_Mode.setChecked(False)
@@ -518,33 +519,43 @@ class MainWindow(QMainWindow, Ui_CT_controller):  # Class with the main window
         self.threadpool = QThreadPool()
 
     def update_linear_position(self):
+        """
+
+        Description: Fills the position label with the linear position from the "?" command
+
+        """
         self.label_detector_position.setText(str(self.linear.linear_position["X"]))
         self.label_sample_position.setText(str(self.linear.linear_position["Y"]))
         self.label_vertical_position.setText(str(self.linear.linear_position["Z"]))
 
-    def check_even(self):  # Check the number of steps for each rotation, if not even increase it by one
+    def check_even(self):
+        """
+
+        Description: check the number of steps for each rotation, if not even increase it by one
+
+        """
         self.n_steps = int(self.lineEdit_steps.text())
         if self.n_steps % 2 != 0:
             self.n_steps += 1
             self.lineEdit_steps.setText(str(self.n_steps))
 
-    def read_linedit(self):  # Read each QLineEdit field which and call the appropriate G0 command for the initial
-        #  position parameters
+    def read_linedit(self):
+        """
+
+        Description: Read each QLineEdit field which and call the appropriate G0 command for the initial, and saves the
+        values for future predefined parameters
+
+        """
         self.n_steps = int(self.lineEdit_steps.text())
         Grbl.write_config("ct_config", "Angles per rotation", new_value=str(self.n_steps))
         self.detector = float(self.lineEdit_detector.text())
-        Grbl.write_config("ct_config", "Distance source detector", new_value=str(self.detector))
         if float(self.detector):
+            Grbl.write_config("ct_config", "Distance source detector", new_value=str(self.detector))
             self.linear.linear_position["X"] = self.detector
         self.sample = float(self.lineEdit_sample.text())
-        Grbl.write_config("ct_config", "Distance Source object", new_value=str(self.sample))
         if float(self.sample):
+            Grbl.write_config("ct_config", "Distance Source object", new_value=str(self.sample))
             self.linear.linear_position["Y"] = self.sample
-        """self.vertical = float(self.lineEdit_vertical.text())
-
-        Grbl.write_config("ct_config", "Object vertical position", new_value=str(self.vertical))
-        if float(self.vertical):
-            self.linear.linear_position["Z"] = self.vertical"""
         self.linear_motion_worker()
         self.update_linear_position()
 
@@ -558,17 +569,27 @@ class MainWindow(QMainWindow, Ui_CT_controller):  # Class with the main window
         Grbl.files_count = Grbl.check_new_file(self.dir_path)
         print(self.dir_path)
 
-    def linear_motion_worker(self):
+    def linear_motion_worker(self):  # Check_later, why not use same thread function fot vertical axis too?
+        """
+
+        Description: Start the thread for the linear movement and deactivate the related buttons meanwhile
+
+        """
         self.pushButton_set.setEnabled(False)
         self.pushButton_next.setEnabled(False)
-        #  self.worker = Worker(self.linear.command_sender, "G0 " + "X" + str(self.linear.linear_position["X"])
-        #                       + "Y" + str(self.linear.linear_position["Y"]) + "Z" +
-        #                       str(self.linear.linear_position["Z"]))
         self.worker = Worker(self.linear_motion)
         self.worker.signals.finished.connect(self.reactivate_linear_buttons)
         self.threadpool.start(self.worker)
 
     def linear_motion(self):
+
+        """
+        Description: Commands the linear movements Gcode
+        Returns:
+            -True: if the reached position corresponds to the desired one
+            -False: if not
+
+        """
         self.linear.command_sender("G0 " + "X" + str(self.linear.linear_position["X"])
                                    + "Y" + str(self.linear.linear_position["Y"]))
         #  + "Z" + str(self.linear.linear_position["Z"])) No vertical movement
@@ -582,7 +603,7 @@ class MainWindow(QMainWindow, Ui_CT_controller):  # Class with the main window
         self.pushButton_set.setEnabled(True)
         self.pushButton_next.setEnabled(True)
 
-    def vert_axis_worker(self, sense, advance):
+    def vert_axis_worker(self, sense, advance):  # Analogue to the linear movement worker
         self.vert_down_pushButton.setEnabled(False)
         self.vert_up_pushButton.setEnabled(False)
         self.lineEdit_vert_disp.setEnabled(False)
@@ -590,7 +611,7 @@ class MainWindow(QMainWindow, Ui_CT_controller):  # Class with the main window
         self.worker.signals.finished.connect(self.reactivate_vert_buttons)
         self.threadpool.start(self.worker)
 
-    def vert_axis_motion(self, sense, advance):
+    def vert_axis_motion(self, sense, advance):  # Analogue to the linear movement
         self.linear.command_sender("G91 " + "Z" + sense + str(advance))
         self.linear.command_sender("G4 P0", "ok")
         return True
@@ -600,20 +621,13 @@ class MainWindow(QMainWindow, Ui_CT_controller):  # Class with the main window
         self.vert_up_pushButton.setEnabled(True)
         self.lineEdit_vert_disp.setEnabled(True)
 
-    def trial_rot_worker(self, sense, advance):
+    def trial_rot_worker(self, sense, advance):  # Analogue to linear movement worker
         self.up_pushButton.setEnabled(False)
         self.down_pushButton.setEnabled(False)
         self.lineEdit_angle_trial.setEnabled(False)
-        #  self.thread = QThread()
-        #  self.worker = Worker(self.servo.trial_angle_rotate, sense, advance, self.mm_per_rot, self.servo)
         self.worker = Worker(self.trial_rot_movement, sense, advance)
-        #  No end signal
         self.worker.signals.finished.connect(self.reactivate_trial_buttons)
         self.threadpool.start(self.worker)
-        #  self.label_current_angle.setText("Current angle: "+str(Grbl.position + advance))
-        #  self.worker.moveToThread(self.thread)
-        #  self.thread.started.connect(self.worker.run)
-        #  self.thread.start()
 
     def trial_rot_movement(self, sense, advance):
         self.servo.trial_angle_rotate(sense, advance, self.mm_per_rot, self.servo)
@@ -621,18 +635,26 @@ class MainWindow(QMainWindow, Ui_CT_controller):  # Class with the main window
         return True
 
     def reactivate_trial_buttons(self):
-        self.lable_current_angle.setText("Current angle: "+str(self.servo.servo_position/self.mm_per_rot*360))
+        self.lable_current_angle.setText("Current angle: "+str(self.servo.servo_position/self.mm_per_rot*360))  # Show
+        # the current position of the rotation axis
         self.up_pushButton.setEnabled(True)
         self.down_pushButton.setEnabled(True)
         self.lineEdit_angle_trial.setEnabled(True)
-        #  print(self.servo.check_position())
 
     def switch_window(self):  # Switch to next window
         controller = Controller(ProgressWindow(self.n_steps, self.dir_path, self.detector, self.sample, self.vertical,
                                                self.detector_type, self.servo, self.mm_per_rot))
         controller.show_window()
 
-    def detector_choice(self, state):  # Radio button for detector choice
+    def detector_choice(self, state):
+        """
+        Description: Radio button for detector choice
+        Args:
+            state (string) detector choice
+
+        Returns:
+
+        """
         self.detector_type = state
         if state == "Flatpanel":
             self.label_Flatpanel.setText("")
@@ -646,55 +668,58 @@ class MainWindow(QMainWindow, Ui_CT_controller):  # Class with the main window
 
 
 class ProgressWindow(Ui_Progress_window, QMainWindow):
+    """
+    Description: in charge of the progress window GUI and relative processes
+    """
     def __init__(self, n_steps, dir_path, detector, sample, vertical, detector_type, servo, mm_per_rot):
         super().__init__()
-        #  QtWidgets.QApplication.__init__(self)
         self.setupUi(self)
         self.clicks_counter = 0
         self.click_position = []
-        self.trigger_delay = 1
+        self.trigger_delay = 1  # Delay after clicking the save button and then inputting the name
         self.prefix_name = "scan"
         self.n_steps, self.dir_path, self.detector, self.sample, self.vertical, self.detector_type, self.servo, \
             self.mm_per_rot = n_steps, dir_path, detector, sample, vertical, detector_type, servo, mm_per_rot
         self.pushButton_start_scan.clicked.connect(self.rotation_control_worker)
-        self.pushButton_cancel.clicked.connect(lambda: (self.stop_reading()))  # Linear also!!
-        #  self.pushButton_cancel.pressed.connect(lambda: (self.servo.command_sender("!")))  # Linear also!!
-        #  self.pushButton_cancel.released.connect(self.close)
+        self.pushButton_cancel.clicked.connect(lambda: (self.stop_reading()))  # Check_later, implement in linear also!!
         self.label_file_path.setText("File path: " + str(self.dir_path))
         self.label_angles_rotation.setText("Angles per rotation: " + str(self.n_steps))
         self.label_detector_position.setText("Detector position: " + str(self.detector))
         self.label_object_position.setText("Object position: " + str(self.sample))
         self.label_vertical_position.setText("Vertical position: " + str(self.vertical))
         self.label_magnification_ratio.setText("Magnification ratio: " + str(self.detector / self.sample))
+        # Check_later, the values don't really coincide with the real ones but the saved ones
         self.threadpool = QThreadPool()
         #  self.thread = None
         self.worker = None
 
     def rotation_control_worker(self):
         self.pushButton_start_scan.setEnabled(False)
-        #  self.thread = QThread()
-        #  self.worker = Worker(self.rotation_control, self.n_steps, self.dir_path, self.detector_type)
         self.worker = Worker(self.rotation_control, self.n_steps, self.servo)
-        # progress_callback=self.worker.signals.progress)
-
-        #  self.worker.moveToThread(self.thread)
         self.worker.signals.progress.connect(self.progress_update_bar)
         self.worker.signals.finished.connect(self.switch_window)
         self.worker.signals.error.connect(self.stop)
-        #  self.worker.signals.error.connect(self.switch_window)
         self.threadpool.start(self.worker)
-        #  self.thread.started.connect(self.worker.run)
-        #  self.thread.start()
-        #  self.pushButton_start_scan.setEnabled(True)
 
     def rotation_control(self, num, servo, progress_callback):
-        if self.lineEdit_prefix.text():
+        """
+        Description: Controls the process during the rotation, commanding the movements and the X-Ray scanning
+        Args:
+            num: (int) number of steps per rotation
+            servo: (Grbl object)
+            progress_callback: (pyqt.signal) it embeds the progress to update the progress bar
+
+        Returns:
+            True: once the process is completed
+
+        """
+        if self.lineEdit_prefix.text():  # Change the default prefix_name
             self.prefix_name = str(self.lineEdit_prefix.text())
-        if self.lineEdit_delay.text():
+        if self.lineEdit_delay.text():  # Change the defalt delay time
             self.trigger_delay = float(self.lineEdit_delay.text())
-        n_zeros = len(str(num))
+        n_zeros = len(str(num))  # Ensures the scan number has the same length, ex: 0001, 5165, 0100
         for step in range(1, num + 1):
-            angle = round(360/num*self.mm_per_rot, 3)
+            angle = round(360/num*self.mm_per_rot, 3)  # Check_urgent, why multiply by 360 to later divide by 360
             servo.servo_position += angle/360
             #  self.servo.command_sender("G0 Z"+str(servo.servo_position), "end") No end signal now
             self.servo.command_sender("G0 Z" + str(servo.servo_position))  # , "ok")
@@ -723,7 +748,7 @@ class ProgressWindow(Ui_Progress_window, QMainWindow):
 
     @staticmethod
     def stop_reading():
-        Grbl.stop_reading = True
+        Grbl.stop_reading = True  # Grbl class variable accessible during the command sending process
 
     @staticmethod
     def stop():
