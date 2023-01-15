@@ -715,29 +715,28 @@ class ProgressWindow(Ui_Progress_window, QMainWindow):
         """
         if self.lineEdit_prefix.text():  # Change the default prefix_name
             self.prefix_name = str(self.lineEdit_prefix.text())
-        if self.lineEdit_delay.text():  # Change the defalt delay time
+        if self.lineEdit_delay.text():  # Change the default delay time
             self.trigger_delay = float(self.lineEdit_delay.text())
         n_zeros = len(str(num))  # Ensures the scan number has the same length, ex: 0001, 5165, 0100
         for step in range(1, num + 1):
             angle = round(360/num*self.mm_per_rot, 3)  # Check_urgent, why multiply by 360 to later divide by 360
             servo.servo_position += angle/360
-            #  self.servo.command_sender("G0 Z"+str(servo.servo_position), "end") No end signal now
-            self.servo.command_sender("G0 Z" + str(servo.servo_position))  # , "ok")
+            self.servo.command_sender("G0 Z" + str(servo.servo_position))
             self.servo.command_sender("G4 P0", "ok")
-            if self.detector_type != "Trial":
+            if self.detector_type != "Trial":  # Skip trigger sender and new file check for trial mode
                 self.trigger_sender(step, n_zeros)
                 while True:
                     print(self.dir_path)
                     if Grbl.check_new_file(self.dir_path) >= Grbl.files_count + 1:
                         Grbl.files_count = Grbl.check_new_file(self.dir_path)
                         break
-                    time.sleep(0.5)
+                    time.sleep(0.1)  # Check for a new file every 0.1 seconds
             else:
-                time.sleep(2)
+                time.sleep(2)  # Time to wait for trial mode in between steps
             progress = int(round(step/num*100))
             # self.progressBar.setValue(progress)
             progress_callback.emit(progress)
-        time.sleep(2)
+        time.sleep(2)  # 2 seconds wait time at the end of the process, check_later, so long needed?
         return True
 
     def progress_update_bar(self, n):
@@ -755,47 +754,56 @@ class ProgressWindow(Ui_Progress_window, QMainWindow):
         sys.exit()
 
     def trigger_sender(self, step, n_zeros):
+        """
+        Description: commands the X-ray scan for a given type of detector
+        Args:
+            step:
+            n_zeros:
+        """
 
-        file_name = str(step).zfill(n_zeros)+"_"+self.prefix_name+".tif"
+        file_name = str(step).zfill(n_zeros)+"_"+self.prefix_name+".tif"  # Check_later, why not inside the flatpanel
+        # function?
         print("Start scan")
         if self.detector_type == "Flatpanel":
             if self.clicks_counter < 2:
                 def on_click(x, y, button, pressed):
-                    if str(button) == "Button.left" and not pressed:
+                    if str(button) == "Button.left" and not pressed:  # The click is already ended
                         print("Click")
-                        if self.clicks_counter == 1:
+                        if self.clicks_counter == 1:  # The second click saves location
                             ProgressWindow.click_position = [x, y]
                             listener.stop()
                         self.clicks_counter += 1
-                with Listener(on_click=on_click) as listener:
+                with Listener(on_click=on_click) as listener:  # Wait for clicks
                     listener.join()
                 print(self.click_position)
             else:
-                time.sleep(2)  # delay after the end of rotation is received (was 2)
+                time.sleep(2)  # delay until next scan start, click on to scan button
                 mouse = Mouse_controller()
                 mouse.position = tuple(self.click_position)
                 mouse.press(Button.left)
                 mouse.release(Button.left)
-            time.sleep(self.trigger_delay)  # wait for the image measuring time
-            time.sleep(5)  # wait for safety time (was at 5)
+            time.sleep(self.trigger_delay)  # Delay until the name is inputted and the image saved
             keyboard = Keyboard_controller()
             with keyboard.pressed(Key.ctrl):
                 keyboard.press("s")
                 keyboard.release("s")
-            keyboard.release(Key.ctrl)
+            keyboard.release(Key.ctrl)  # Ctrl + s
             time.sleep(0.5)  # Wait time for the saving window to appear and then submit the name
             keyboard.type(file_name)  # "Scan"+str(step))
             time.sleep(0.5)  # Delay before pressing start to save the file
             keyboard.press(Key.enter)
             time.sleep(0.1)  # Duration of the ke press (probably not needed)
             keyboard.release(Key.enter)
-        elif self.detector_type == "Medipix":
+        elif self.detector_type == "Medipix":  # Just send a high pulse
             self.servo.command_sender("M08")
             time.sleep(0.5)
             self.servo.command_sender("M09")
 
 
 class UnlockWindow(QMainWindow, Ui_Unlocksystem):
+    """
+    Description: prompts user to either home or override the grbl board if it's in lock state
+    """
 
     def __init__(self, servo, linear):
         super().__init__()
@@ -815,6 +823,9 @@ class UnlockWindow(QMainWindow, Ui_Unlocksystem):
 
 
 class Controller:
+    """
+    Description: class in charge of launching the next window inputted as window.
+    """
     def __init__(self, window):
         self.showing_window = window
 
@@ -826,17 +837,17 @@ class Controller:
 
 
 def main():
-    # position = 0
     app = QtWidgets.QApplication(sys.argv)
-    controller = Controller(ConnectionWindow())
+    controller = Controller(ConnectionWindow())  # Start Connection window class
     if not (Grbl.read_config("linear_stage", "port")[0] and Grbl.read_config("servo_stage", "port")[0] and
-            Grbl.read_config("ensemble", "IP")[0] and Grbl.read_config("ensemble", "port")[0]):
+            Grbl.read_config("ensemble", "IP")[0] and Grbl.read_config("ensemble", "port")[0]):  # If there is not saved
+        # config for the different stages connections show the connection window
         controller.show_window()
     else:
         connection_trial = ConnectionWindow()
-        if not connection_trial.connection():
+        if not connection_trial.connection():  # If the connection was unsuccessful show the connection window
             controller.show_window()
-        else:
+        else:  # If the connection was successful show the main window
             connection_trial.switch_window(True)
     sys.exit(app.exec_())
 
