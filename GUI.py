@@ -38,10 +38,6 @@ class Grbl:
     errors = pd.read_csv("error_codes_en_US.csv")  # Dataframe with description of error messages in GRBL
     # Initialization of various class variables
     list_serial_ports = None
-    #  Both needed for flatpanel detector, check_later, are they really needed? Also implemented in ProgressWindow class
-    #  clicks_counter = 0
-    #  click_position = []
-    #  servo_position = 0  # Check_later, is it really needed? already defined in __init__
     files_count = 0  # In selected directory for image recording
 
     with open('config.yml') as f_read:  # Configuration file for parameters to be stored from session to session
@@ -67,7 +63,7 @@ class Grbl:
         try:
             print(self.port)
             self.connect = serial.Serial(self.port, self.grbl_bitrate, timeout=self.timeout)
-        # Code to cath possible reasons for not successful connection
+        # Code to catch possible reasons for not successful connection
         except serial.SerialException as e:
             error = int(e.args[0].split("(")[1].split(",")[0])
             print(error)
@@ -77,10 +73,16 @@ class Grbl:
                 raise ValueError("Zugriff verweigert: "+self.motor)
         self.start_msg = (self.connect.read(100)).decode()
         if self.motor == "servo" and "servo" not in self.start_msg:
-            raise ValueError("Servo stage connected at linear")  # Check_later, empty message comes also
+            if not self.start_msg:
+                raise ValueError("No response from the servo connected port")
+            else:
+                raise ValueError("Servo stage connected at linear")
             # as servo stage connected at linear
-        elif self.motor == "linear" and "servo" in self.start_msg:
-            raise ValueError("Linear stage connected at servo")
+        elif self.motor == "linear":
+            if not self.start_msg:
+                raise ValueError("No response from the linear connected port")
+            elif "servo" in self.start_msg:
+                raise ValueError("Linear stage connected at servo")
         if "'$H'|'$X' to unlock" in self.start_msg:  # If a part of the locked message is found
             self.lock_state = True
 
@@ -271,10 +273,6 @@ class Grbl:
             f_write.close()
 
 
-Grbl.serial_ports()  # Check_later, shouldn't it go in the main() function?
-print(Grbl.list_serial_ports)
-
-
 class WorkerSignals(QObject):
     """
     Description: Class defining the pyqtsignals and it's type
@@ -460,8 +458,7 @@ class MainWindow(QMainWindow, Ui_CT_controller):  # Class with the main window
         self.lineEdit_steps.editingFinished.connect(self.check_even)  # Once the value of steps is introduced, check if
         # it is an even number
         self.up_pushButton.clicked.connect(
-            lambda: (self.trial_rot_worker(float("+"+self.lineEdit_angle_trial.text()))))  # Check_later, why not just
-        # pass + and - instead of up and down or "" and "-" where + not to work
+            lambda: (self.trial_rot_worker(float("+"+self.lineEdit_angle_trial.text()))))
         self.down_pushButton.clicked.connect(
             lambda: (self.trial_rot_worker(float("-"+self.lineEdit_angle_trial.text()))))
         self.vert_up_pushButton.clicked.connect(
@@ -472,7 +469,6 @@ class MainWindow(QMainWindow, Ui_CT_controller):  # Class with the main window
         self.pushButton_next.clicked.connect(self.switch_window)
         self.actionReset_GRBL.triggered.connect(lambda: (self.linear.command_sender(chr(24))))
         self.actionChoose_file_path.triggered.connect(self.get_path)
-        #  self.lineEdit_vertical.setText(str(self.vertical))
         self.lineEdit_vert_disp.setText(str(self.vertical))
         self.lineEdit_sample.setText(str(self.sample))
         self.lineEdit_detector.setText(str(self.detector))
@@ -551,7 +547,7 @@ class MainWindow(QMainWindow, Ui_CT_controller):  # Class with the main window
         Grbl.files_count = Grbl.check_new_file(self.dir_path)
         print(self.dir_path)
 
-    def linear_motion_worker(self):  # Check_later, why not use same thread function fot vertical axis too?
+    def linear_motion_worker(self):
         """
 
         Description: Start the thread for the linear movement and deactivate the related buttons meanwhile
@@ -611,7 +607,7 @@ class MainWindow(QMainWindow, Ui_CT_controller):  # Class with the main window
         self.worker.signals.finished.connect(self.reactivate_trial_buttons)
         self.threadpool.start(self.worker)
 
-    def trial_angle_rotate(self, advance, mm_per_rot, servo):  # Check_later consider moving to the MainWindow
+    def trial_angle_rotate(self, advance, mm_per_rot, servo):
         # class
         """
         Description: send appropriate Gcode message to the grbl servo board
@@ -728,7 +724,7 @@ class ProgressWindow(Ui_Progress_window, QMainWindow):
             progress = int(round(step/num*100))
             # self.progressBar.setValue(progress)
             progress_callback.emit(progress)
-        time.sleep(2)  # 2 seconds wait time at the end of the process, check_later, so long needed?
+        time.sleep(2)  # 2 seconds wait time at the end of the process
         return True
 
     def progress_update_bar(self, n):
@@ -752,10 +748,10 @@ class ProgressWindow(Ui_Progress_window, QMainWindow):
             n_zeros:
         """
 
-        file_name = str(step).zfill(n_zeros)+"_"+self.prefix_name+".tif"  # Check_later, why not inside the flatpanel
-        # function?
         print("Start scan")
         if self.detector_type == "Flatpanel":
+            file_name = str(step).zfill(
+                n_zeros) + "_" + self.prefix_name + ".tif"
             if self.clicks_counter < 2:
                 def on_click(x, y, button, pressed):
                     if str(button) == "Button.left" and not pressed:  # The click is already ended
@@ -828,6 +824,8 @@ class Controller:
 
 
 def main():
+    Grbl.serial_ports()
+    print(Grbl.list_serial_ports)
     app = QtWidgets.QApplication(sys.argv)
     controller = Controller(ConnectionWindow())  # Start Connection window class
     if not (Grbl.read_config("linear_stage", "port")[0] and Grbl.read_config("servo_stage", "port")[0] and
