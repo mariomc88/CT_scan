@@ -270,24 +270,6 @@ class Grbl:
                 yaml.dump(Grbl.config, f_write)
             f_write.close()
 
-    def trial_angle_rotate(self, sense, advance, mm_per_rot, servo):  # Check_later consider moving to the MainWindow
-        # class
-        """
-        Description: send appropriate Gcode message to the grbl servo board
-
-                    Args:
-                        -sense (string): up or down
-                        -advance (float): degrees to rotate
-                        -mm_per_rot (float): conversion constant from degrees to mm
-        """
-        Grbl.write_config("ct_config", "Trials angle", new_value=advance)
-        if sense == "up":
-            servo.servo_position += advance/360*mm_per_rot
-            self.command_sender(command="G0 Z" + str(servo.servo_position))
-        else:
-            servo.servo_position -= advance/360*mm_per_rot
-            self.command_sender(command="G0 Z" + str(servo.servo_position))
-
 
 Grbl.serial_ports()  # Check_later, shouldn't it go in the main() function?
 print(Grbl.list_serial_ports)
@@ -478,14 +460,14 @@ class MainWindow(QMainWindow, Ui_CT_controller):  # Class with the main window
         self.lineEdit_steps.editingFinished.connect(self.check_even)  # Once the value of steps is introduced, check if
         # it is an even number
         self.up_pushButton.clicked.connect(
-            lambda: (self.trial_rot_worker("up", float(self.lineEdit_angle_trial.text()))))  # Check_later, why not just
+            lambda: (self.trial_rot_worker(float("+"+self.lineEdit_angle_trial.text()))))  # Check_later, why not just
         # pass + and - instead of up and down or "" and "-" where + not to work
         self.down_pushButton.clicked.connect(
-            lambda: (self.trial_rot_worker("down", float(self.lineEdit_angle_trial.text()))))
+            lambda: (self.trial_rot_worker(float("-"+self.lineEdit_angle_trial.text()))))
         self.vert_up_pushButton.clicked.connect(
-            lambda: (self.vert_axis_worker("+", float(self.lineEdit_vert_disp.text()))))
+            lambda: (self.vert_axis_worker(float("+"+self.lineEdit_vert_disp.text()))))
         self.vert_down_pushButton.clicked.connect(
-            lambda: (self.vert_axis_worker("-", float(self.lineEdit_vert_disp.text()))))
+            lambda: (self.vert_axis_worker(float("-"+self.lineEdit_vert_disp.text()))))
         self.pushButton_set.clicked.connect(self.read_linedit)
         self.pushButton_next.clicked.connect(self.switch_window)
         self.actionReset_GRBL.triggered.connect(lambda: (self.linear.command_sender(chr(24))))
@@ -603,16 +585,16 @@ class MainWindow(QMainWindow, Ui_CT_controller):  # Class with the main window
         self.pushButton_set.setEnabled(True)
         self.pushButton_next.setEnabled(True)
 
-    def vert_axis_worker(self, sense, advance):  # Analogue to the linear movement worker
+    def vert_axis_worker(self, advance):  # Analogue to the linear movement worker
         self.vert_down_pushButton.setEnabled(False)
         self.vert_up_pushButton.setEnabled(False)
         self.lineEdit_vert_disp.setEnabled(False)
-        self.worker = Worker(self.vert_axis_motion, sense, advance)
+        self.worker = Worker(self.vert_axis_motion, advance)
         self.worker.signals.finished.connect(self.reactivate_vert_buttons)
         self.threadpool.start(self.worker)
 
-    def vert_axis_motion(self, sense, advance):  # Analogue to the linear movement
-        self.linear.command_sender("G91 " + "Z" + sense + str(advance))
+    def vert_axis_motion(self, advance):  # Analogue to the linear movement
+        self.linear.command_sender("G91 " + "Z" + str(advance))
         self.linear.command_sender("G4 P0", "ok")
         return True
 
@@ -621,16 +603,26 @@ class MainWindow(QMainWindow, Ui_CT_controller):  # Class with the main window
         self.vert_up_pushButton.setEnabled(True)
         self.lineEdit_vert_disp.setEnabled(True)
 
-    def trial_rot_worker(self, sense, advance):  # Analogue to linear movement worker
+    def trial_rot_worker(self, advance):  # Analogue to linear movement worker
         self.up_pushButton.setEnabled(False)
         self.down_pushButton.setEnabled(False)
         self.lineEdit_angle_trial.setEnabled(False)
-        self.worker = Worker(self.trial_rot_movement, sense, advance)
+        self.worker = Worker(self.trial_angle_rotate, advance, self.mm_per_rot, self.servo)
         self.worker.signals.finished.connect(self.reactivate_trial_buttons)
         self.threadpool.start(self.worker)
 
-    def trial_rot_movement(self, sense, advance):
-        self.servo.trial_angle_rotate(sense, advance, self.mm_per_rot, self.servo)
+    def trial_angle_rotate(self, advance, mm_per_rot, servo):  # Check_later consider moving to the MainWindow
+        # class
+        """
+        Description: send appropriate Gcode message to the grbl servo board
+
+                    Args:
+                        -advance (float): degrees to rotate
+                        -mm_per_rot (float): conversion constant from degrees to mm
+        """
+        Grbl.write_config("ct_config", "Trials angle", new_value=advance)
+        self.servo.servo_position += advance/360*mm_per_rot
+        self.servo.command_sender(command="G0 Z" + str(servo.servo_position))
         self.servo.command_sender("G4 P0", "ok")
         return True
 
