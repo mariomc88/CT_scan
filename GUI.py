@@ -38,12 +38,11 @@ class Grbl:
     errors = pd.read_csv("error_codes_en_US.csv")  # Dataframe with description of error messages in GRBL
     # Initialization of various class variables
     list_serial_ports = None
-    # Both needed for flatpanel detector, check_later, are they really needed? Also implemented in ProgressWindow class
-    clicks_counter = 0
-    click_position = []
-    servo_position = 0  # Check_later, is it really needed? already defined in __init__
+    #  Both needed for flatpanel detector, check_later, are they really needed? Also implemented in ProgressWindow class
+    #  clicks_counter = 0
+    #  click_position = []
+    #  servo_position = 0  # Check_later, is it really needed? already defined in __init__
     files_count = 0  # In selected directory for image recording
-    stop_reading = False
 
     with open('config.yml') as f_read:  # Configuration file for parameters to be stored from session to session
         config = yaml.load(f_read, Loader=yaml.FullLoader)
@@ -57,6 +56,8 @@ class Grbl:
         self.lock_state = False
         self.motor = motor
         self.lock_state = False
+        self.stop_reading = False
+
         # Position initialization for motor type
         if self.motor == "servo":
             self.servo_position = 0
@@ -155,8 +156,7 @@ class Grbl:
                     print("No terminating character received")
                     return False  # Check_later, should grbl_out also be returned?
 
-    @staticmethod
-    def read_non_blocking(connection, read_until=""):
+    def read_non_blocking(self, connection, read_until=""):
         """
         Description: thread friendly serial message sender, allows the
         termination of the execution thread when Grbl.stop_reading == True
@@ -172,7 +172,7 @@ class Grbl:
         else:
             timeout = 0
         while connection.is_open:
-            if Grbl.stop_reading:  # Variable state changes to True when an
+            if self.stop_reading:  # Variable state changes to True when an
                 # "emergency_stop" is issued by the user, see ProgressWindow.stop_reading
                 connection.write(b"!")  # Stop executing commands
                 #  connection.close()
@@ -719,8 +719,8 @@ class ProgressWindow(Ui_Progress_window, QMainWindow):
             self.trigger_delay = float(self.lineEdit_delay.text())
         n_zeros = len(str(num))  # Ensures the scan number has the same length, ex: 0001, 5165, 0100
         for step in range(1, num + 1):
-            angle = round(360/num*self.mm_per_rot, 3)  # Check_urgent, why multiply by 360 to later divide by 360
-            servo.servo_position += angle/360
+            angle = round(1/num*self.mm_per_rot, 3)  # Check_urgent, why multiply by 360 to later divide by 360
+            servo.servo_position += angle
             self.servo.command_sender("G0 Z" + str(servo.servo_position))
             self.servo.command_sender("G4 P0", "ok")
             if self.detector_type != "Trial":  # Skip trigger sender and new file check for trial mode
@@ -745,9 +745,8 @@ class ProgressWindow(Ui_Progress_window, QMainWindow):
     def switch_window(self):
         self.close()
 
-    @staticmethod
-    def stop_reading():
-        Grbl.stop_reading = True  # Grbl class variable accessible during the command sending process
+    def stop_reading(self):
+        self.servo.stop_reading = True  # Grbl class variable accessible during the command sending process
 
     @staticmethod
     def stop():
@@ -770,27 +769,27 @@ class ProgressWindow(Ui_Progress_window, QMainWindow):
                     if str(button) == "Button.left" and not pressed:  # The click is already ended
                         print("Click")
                         if self.clicks_counter == 1:  # The second click saves location
-                            ProgressWindow.click_position = [x, y]
+                            self.click_position = [x, y]
                             listener.stop()
                         self.clicks_counter += 1
                 with Listener(on_click=on_click) as listener:  # Wait for clicks
                     listener.join()
                 print(self.click_position)
             else:
-                time.sleep(2)  # delay until next scan start, click on to scan button
+                time.sleep(self.trigger_delay)  # delay until next scan start, click on to scan button
                 mouse = Mouse_controller()
                 mouse.position = tuple(self.click_position)
                 mouse.press(Button.left)
                 mouse.release(Button.left)
-            time.sleep(self.trigger_delay)  # Delay until the name is inputted and the image saved
+            time.sleep(self.trigger_delay)  # Delay after the image capture is clicked, to let the scan time to process
             keyboard = Keyboard_controller()
             with keyboard.pressed(Key.ctrl):
                 keyboard.press("s")
                 keyboard.release("s")
             keyboard.release(Key.ctrl)  # Ctrl + s
-            time.sleep(0.5)  # Wait time for the saving window to appear and then submit the name
+            time.sleep(1.5)  # Wait time for the saving window to appear and then submit the name
             keyboard.type(file_name)  # "Scan"+str(step))
-            time.sleep(0.5)  # Delay before pressing start to save the file
+            time.sleep(1)  # Delay before pressing start to save the file
             keyboard.press(Key.enter)
             time.sleep(0.1)  # Duration of the ke press (probably not needed)
             keyboard.release(Key.enter)
