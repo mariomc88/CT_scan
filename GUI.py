@@ -50,7 +50,7 @@ class Worker(QRunnable):
             self.signals.finished.emit()  # Done
         except NotImplementedError:  # Captures the termination process for the command_sender()
             self.signals.finished.emit()
-            self.signals.error.emit("Close all")  # Check_later, shouldn't this also be implemented for linear movement?
+            self.signals.error.emit("Close all")
 
 
 class ConnectionWindow(QMainWindow, Ui_Connection_parameters, Grbl):
@@ -181,20 +181,20 @@ class MainWindow(QMainWindow, Ui_CT_controller):  # Class with the main window
     """
     def __init__(self, servo, linear):
         super().__init__()
+        self.linear = linear
+        self.linear.linear_position = dict(self.linear.check_position())
         # Read predefined parameters
         self.n_steps = int(Grbl.read_config("ct_config", "Angles per rotation")[0])
         self.trial_rot = float(Grbl.read_config("ct_config", "Trials angle")[0])
         self.dir_path = str(Grbl.read_config("file_path", "route")[0])
-        self.detector = float(Grbl.read_config("ct_config", "Distance source detector")[0])
-        self.sample = float(Grbl.read_config("ct_config", "Distance Source object")[0])
-        self.vertical = float(Grbl.read_config("ct_config", "Object vertical position")[0])
+        self.detector = self.linear.linear_position["X"]
+        self.sample = self.linear.linear_position["Y"]
+        self.vertical = self.linear.linear_position["Z"]
         self.detector_type = str(Grbl.read_config("ct_config", "Detector type")[0])
         self.mm_per_rot = 360  # Conversion from degrees to mm
         self.files_count = 0
         self.setupUi(self)
         self.servo = servo
-        self.linear = linear
-        self.linear.linear_position = self.linear.check_position()
         self.update_linear_position()  # Check for linear stage working position and wco
         self.lineEdit_steps.editingFinished.connect(self.check_even)  # Once the value of steps is introduced, check if
         # it is an even number
@@ -203,9 +203,9 @@ class MainWindow(QMainWindow, Ui_CT_controller):  # Class with the main window
         self.down_pushButton.clicked.connect(
             lambda: (self.trial_rot_worker(float("-"+self.lineEdit_angle_trial.text()))))
         self.vert_up_pushButton.clicked.connect(
-            lambda: (self.vert_axis_worker(float("+"+self.lineEdit_vert_disp.text()))))
+            lambda: (self.linear_motion(float("+"+self.lineEdit_vert_disp.text()))))
         self.vert_down_pushButton.clicked.connect(
-            lambda: (self.vert_axis_worker(float("-"+self.lineEdit_vert_disp.text()))))
+            lambda: (self.linear_motion(float("-"+self.lineEdit_vert_disp.text()))))
         self.pushButton_set.clicked.connect(self.read_linedit)
         self.pushButton_next.clicked.connect(self.switch_window)
         self.pushButton_cancel.clicked.connect(self.stop_reading)
@@ -277,7 +277,6 @@ class MainWindow(QMainWindow, Ui_CT_controller):  # Class with the main window
             Grbl.write_config("ct_config", "Distance Source object", new_value=str(self.sample))
             self.linear.linear_position["Y"] = self.sample
         self.linear_motion_worker()
-        self.update_linear_position()
 
     def get_path(self):  # Choose the path from the dropdown menu
         """
@@ -297,24 +296,31 @@ class MainWindow(QMainWindow, Ui_CT_controller):  # Class with the main window
         """
         self.pushButton_set.setEnabled(False)
         self.pushButton_next.setEnabled(False)
+        self.vert_down_pushButton.setEnabled(False)
+        self.vert_up_pushButton.setEnabled(False)
+        self.lineEdit_vert_disp.setEnabled(False)
         self.worker = Worker(self.linear_motion)
         self.worker.signals.finished.connect(self.reactivate_linear_buttons)
         self.worker.signals.error.connect(self.stop)
         self.threadpool.start(self.worker)
 
-    def linear_motion(self):
+    def linear_motion(self, advance=None):
 
         """
         Description: Commands the linear movements Gcode
         Returns:
             -True: if the reached position corresponds to the desired one
+            -Advance: the increment to advance in the Z axis, need to recalculate Z position based on it
             -False: if not
 
         """
+        if advance:
+            self.linear.linear_position["Z"] += advance
         self.linear.command_sender("G0 " + "X" + str(self.linear.linear_position["X"])
-                                   + "Y" + str(self.linear.linear_position["Y"]))
-        #  + "Z" + str(self.linear.linear_position["Z"])) No vertical movement
+                                   + "Y" + str(self.linear.linear_position["Y"])
+                                   + "Z" + str(self.linear.linear_position["Z"]))
         self.linear.command_sender("G4 P0", "ok")
+        self.update_linear_position()
         if self.linear.linear_position == self.linear.check_position:
             return True
         else:
@@ -323,22 +329,6 @@ class MainWindow(QMainWindow, Ui_CT_controller):  # Class with the main window
     def reactivate_linear_buttons(self):
         self.pushButton_set.setEnabled(True)
         self.pushButton_next.setEnabled(True)
-
-    def vert_axis_worker(self, advance):  # Analogue to the linear movement worker
-        self.vert_down_pushButton.setEnabled(False)
-        self.vert_up_pushButton.setEnabled(False)
-        self.lineEdit_vert_disp.setEnabled(False)
-        self.worker = Worker(self.vert_axis_motion, advance)
-        self.worker.signals.finished.connect(self.reactivate_vert_buttons)
-        self.worker.signals.error.connect(self.stop)
-        self.threadpool.start(self.worker)
-
-    def vert_axis_motion(self, advance):  # Analogue to the linear movement, Check_later, why not with linear movement
-        self.linear.command_sender("G91 " + "Z" + str(advance))
-        self.linear.command_sender("G4 P0", "ok")
-        return True
-
-    def reactivate_vert_buttons(self):
         self.vert_down_pushButton.setEnabled(True)
         self.vert_up_pushButton.setEnabled(True)
         self.lineEdit_vert_disp.setEnabled(True)
@@ -383,6 +373,7 @@ class MainWindow(QMainWindow, Ui_CT_controller):  # Class with the main window
         sys.exit()
 
     def switch_window(self):  # Switch to next window
+        self.linear.linear_position = self.linear.check_position
         controller = Controller(ProgressWindow(self.n_steps, self.dir_path, self.detector, self.sample, self.vertical,
                                                self.detector_type, self.servo, self.mm_per_rot))
         controller.show_window()
@@ -422,14 +413,13 @@ class ProgressWindow(Ui_Progress_window, QMainWindow):
         self.n_steps, self.dir_path, self.detector, self.sample, self.vertical, self.detector_type, self.servo, \
             self.mm_per_rot = n_steps, dir_path, detector, sample, vertical, detector_type, servo, mm_per_rot
         self.pushButton_start_scan.clicked.connect(self.rotation_control_worker)
-        self.pushButton_cancel.clicked.connect(lambda: (self.stop_reading()))  # Check_later, implement in linear also!!
+        self.pushButton_cancel.clicked.connect(lambda: (self.stop_reading()))
         self.label_file_path.setText("File path: " + str(self.dir_path))
         self.label_angles_rotation.setText("Angles per rotation: " + str(self.n_steps))
         self.label_detector_position.setText("Detector position: " + str(self.detector))
         self.label_object_position.setText("Object position: " + str(self.sample))
         self.label_vertical_position.setText("Vertical position: " + str(self.vertical))
         self.label_magnification_ratio.setText("Magnification ratio: " + str(self.detector / self.sample))
-        # Check_later, the values don't really coincide with the real ones but the saved ones
         self.threadpool = QThreadPool()
         #  self.thread = None
         self.worker = None
