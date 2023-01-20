@@ -40,8 +40,8 @@ class Grbl:
         self.timeout = timeout
         self.lock_state = False
         self.motor = motor
-        self.lock_state = False
         self.stop_reading = False
+        self.linear_homed = False
 
         # Position initialization for motor type
         if self.motor == "servo":

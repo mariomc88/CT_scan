@@ -199,13 +199,13 @@ class MainWindow(QMainWindow, Ui_CT_controller):  # Class with the main window
         self.lineEdit_steps.editingFinished.connect(self.check_even)  # Once the value of steps is introduced, check if
         # it is an even number
         self.up_pushButton.clicked.connect(
-            lambda: (self.trial_rot_worker(float("+"+self.lineEdit_angle_trial.text()))))
+            lambda: (self.trial_rot_worker(float("+"+self.lineEdit_angle_trial.text().replace("-", "")))))
         self.down_pushButton.clicked.connect(
-            lambda: (self.trial_rot_worker(float("-"+self.lineEdit_angle_trial.text()))))
+            lambda: (self.trial_rot_worker(float("-"+self.lineEdit_angle_trial.text().replace("-", "")))))
         self.vert_up_pushButton.clicked.connect(
-            lambda: (self.linear_motion(float("+"+self.lineEdit_vert_disp.text()))))
+            lambda: (self.linear_motion(float("+"+self.lineEdit_vert_disp.text().replace("-", "")))))
         self.vert_down_pushButton.clicked.connect(
-            lambda: (self.linear_motion(float("-"+self.lineEdit_vert_disp.text()))))
+            lambda: (self.linear_motion(float("-"+self.lineEdit_vert_disp.text().replace("-", "")))))
         self.pushButton_set.clicked.connect(self.read_linedit)
         self.pushButton_next.clicked.connect(self.switch_window)
         self.pushButton_cancel.clicked.connect(self.stop_reading)
@@ -232,7 +232,12 @@ class MainWindow(QMainWindow, Ui_CT_controller):  # Class with the main window
             self.radioButton_Flatpanel.setChecked(False)
             self.radioButton_Medipix.setChecked(False)
             self.radioButton_Trial_Mode.setChecked(False)
-
+        if not linear.linear_homed:
+            self.pushButton_set.setEnabled(False)
+            self.pushButton_next.setEnabled(False)
+            self.vert_down_pushButton.setEnabled(False)
+            self.vert_up_pushButton.setEnabled(False)
+            self.lineEdit_vert_disp.setEnabled(False)
         #  self.thread = None
         #  self.worker = None
         self.worker = None
@@ -358,8 +363,8 @@ class MainWindow(QMainWindow, Ui_CT_controller):  # Class with the main window
         return True
 
     def reactivate_trial_buttons(self):
-        self.lable_current_angle.setText("Current angle: "+str(self.servo.servo_position/self.mm_per_rot*360))  # Show
-        # the current position of the rotation axis
+        self.lable_current_angle.setText("Current angle: "+str(round(self.servo.servo_position/self.mm_per_rot*360, 3)))
+        # Show the current position of the rotation axis
         self.up_pushButton.setEnabled(True)
         self.down_pushButton.setEnabled(True)
         self.lineEdit_angle_trial.setEnabled(True)
@@ -450,8 +455,10 @@ class ProgressWindow(Ui_Progress_window, QMainWindow):
             self.trigger_delay = float(self.lineEdit_delay.text())
         n_zeros = len(str(num))  # Ensures the scan number has the same length, ex: 0001, 5165, 0100
         for step in range(1, num + 1):
+            print('num = ', num)
             angle = round(1/num*self.mm_per_rot, 3)  # Check_urgent, why multiply by 360 to later divide by 360
             servo.servo_position += angle
+            print('servo.servo_position ', servo.servo_position)
             self.servo.command_sender("G0 Z" + str(servo.servo_position))
             self.servo.command_sender("G4 P0", "ok")
             if self.detector_type != "Trial":  # Skip trigger sender and new file check for trial mode
@@ -541,10 +548,14 @@ class UnlockWindow(QMainWindow, Ui_Unlocksystem):
         self.setupUi(self)
         self.servo = servo
         self.linear = linear
-        self.pushButton_homing.pressed.connect(lambda: (self.linear.command_sender("$H", "ok")))
+        self.pushButton_homing.pressed.connect(self.homing)
         self.pushButton_homing.released.connect(self.switch_window)
         self.pushButton_override.pressed.connect(lambda: (self.linear.command_sender("$X")))
         self.pushButton_override.released.connect(self.switch_window)
+
+    def homing(self):
+        self.linear.command_sender("$H", "ok")
+        self.linear.linear_homed = True
 
     def switch_window(self):
         controller = Controller(MainWindow(self.servo, self.linear))
