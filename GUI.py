@@ -234,7 +234,6 @@ class MainWindow(QMainWindow, Ui_CT_controller):  # Class with the main window
             self.radioButton_Trial_Mode.setChecked(False)
         if not linear.linear_homed:
             self.pushButton_set.setEnabled(False)
-            self.pushButton_next.setEnabled(False)
             self.vert_down_pushButton.setEnabled(False)
             self.vert_up_pushButton.setEnabled(False)
             self.lineEdit_vert_disp.setEnabled(False)
@@ -271,8 +270,6 @@ class MainWindow(QMainWindow, Ui_CT_controller):  # Class with the main window
         values for future predefined parameters
 
         """
-        self.n_steps = int(self.lineEdit_steps.text())
-        Grbl.write_config("ct_config", "Angles per rotation", new_value=str(self.n_steps))
         self.detector = float(self.lineEdit_detector.text())
         if float(self.detector):
             Grbl.write_config("ct_config", "Distance source detector", new_value=str(self.detector))
@@ -378,6 +375,9 @@ class MainWindow(QMainWindow, Ui_CT_controller):  # Class with the main window
         sys.exit()
 
     def switch_window(self):  # Switch to next window
+        # Save the value of the number of steps to be done for each rotation
+        self.n_steps = int(self.lineEdit_steps.text())
+        Grbl.write_config("ct_config", "Angles per rotation", new_value=str(self.n_steps))
         self.linear.linear_position = self.linear.check_position
         controller = Controller(ProgressWindow(self.n_steps, self.dir_path, self.detector, self.sample, self.vertical,
                                                self.detector_type, self.servo, self.mm_per_rot))

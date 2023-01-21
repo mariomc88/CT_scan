@@ -11,3 +11,4 @@ once the rotation starts, and another one once it finishes, meaning we need to w
 the number of readouts per trigger.
 Each limit axis interrupt is mapped to the same function, meaning that in the current state, all would result in the same action. However, it can be 
 modified so that each of the interrupts result on a different action, if that was needed.
+# Medical_image_analysis
