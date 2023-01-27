@@ -355,8 +355,9 @@ class MainWindow(QMainWindow, Ui_CT_controller):  # Class with the main window
         """
         Grbl.write_config("ct_config", "Trials angle", new_value=advance)
         self.servo.servo_position += advance/360*mm_per_rot
-        self.servo.command_sender(command="G0 Z" + str(servo.servo_position))
-        self.servo.command_sender("G4 P0", "ok")
+        self.servo.command_sender("G0 Z" + str(servo.servo_position), "end")
+        #  self.servo.command_sender(command="G0 Z" + str(servo.servo_position))
+        #  self.servo.command_sender("G4 P0", "ok")
         return True
 
     def reactivate_trial_buttons(self):
@@ -449,18 +450,22 @@ class ProgressWindow(Ui_Progress_window, QMainWindow):
             True: once the process is completed
 
         """
+        Grbl.files_count = Grbl.check_new_file(self.dir_path)
         if self.lineEdit_prefix.text():  # Change the default prefix_name
             self.prefix_name = str(self.lineEdit_prefix.text())
         if self.lineEdit_delay.text():  # Change the default delay time
             self.trigger_delay = float(self.lineEdit_delay.text())
         n_zeros = len(str(num))  # Ensures the scan number has the same length, ex: 0001, 5165, 0100
-        for step in range(1, num + 1):
-            print('num = ', num)
-            angle = round(1/num*self.mm_per_rot, 3)  # Check_urgent, why multiply by 360 to later divide by 360
-            servo.servo_position += angle
+        angle = round(1 / num * self.mm_per_rot, 3)
+        for step in range(0, num + 1):
+            print('num = ', step, "out of ", num)
+
+            if step > 0:  # The first measurement should come from the starting position
+                servo.servo_position += angle
+                self.servo.command_sender("G0 Z" + str(servo.servo_position), "end")
             print('servo.servo_position ', servo.servo_position)
-            self.servo.command_sender("G0 Z" + str(servo.servo_position))
-            self.servo.command_sender("G4 P0", "ok")
+            #  self.servo.command_sender("G0 Z" + str(servo.servo_position))
+            #  self.servo.command_sender("G4 P0", "ok")
             if self.detector_type != "Trial":  # Skip trigger sender and new file check for trial mode
                 self.trigger_sender(step, n_zeros)
                 while True:
@@ -468,6 +473,10 @@ class ProgressWindow(Ui_Progress_window, QMainWindow):
                     if Grbl.check_new_file(self.dir_path) >= Grbl.files_count + 1:
                         Grbl.files_count = Grbl.check_new_file(self.dir_path)
                         break
+                    if self.servo.stop_reading:
+                        self.servo.stop_reading = False
+                        self.close()
+                        return False
                     time.sleep(0.1)  # Check for a new file every 0.1 seconds
             else:
                 time.sleep(2)  # Time to wait for trial mode in between steps

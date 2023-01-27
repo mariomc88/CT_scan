@@ -135,14 +135,19 @@ class Grbl:
             return grbl_out
 
         else:
-            self.connect.timeout = 120  # To account for long homing or displacements
+            #  self.connect.timeout = 120  # To account for long homing or displacements
+            ack_counter = 0
             while True:
                 grbl_out = self.read_non_blocking(self.connect, ack)
                 print(grbl_out)
                 if ack in grbl_out:
-                    print("Displacement completed")
-                    self.connect.timeout = 2  # Restore default timeout, check later
-                    return True
+                    if ack == "end" and ack_counter == 0:
+                        ack_counter += 1
+                        continue
+                    else:
+                        print("Displacement completed")
+                        #  self.connect.timeout = 2  # Restore default timeout, check later
+                        return True
                 else:
                     print("No terminating character received")
                     return False  # Check_later, should grbl_out also be returned?
@@ -158,10 +163,9 @@ class Grbl:
         """
         data_str = ""
         counter = 0
-        if connection.timeout:
-            timeout = connection.timeout / 0.01
-        else:
-            timeout = 0
+        timeout = connection.timeout / 0.01
+        if read_until:
+            timeout = 300/0.01
         while connection.is_open:
             if self.stop_reading:  # Variable state changes to True when an
                 # "emergency_stop" is issued by the user, see ProgressWindow.stop_reading
@@ -171,9 +175,11 @@ class Grbl:
                 raise NotImplementedError("Stop reading")
             if connection.in_waiting > 0:  # Message received to buffer
                 data_str += connection.read(connection.in_waiting).decode('ascii')
+                if read_until and read_until in data_str:
+                    return data_str
             else:
                 counter += 1
-                if (timeout and counter > timeout) or (read_until and read_until in data_str):
+                if timeout and counter > timeout:
                     return data_str
                 time.sleep(0.01)
 
