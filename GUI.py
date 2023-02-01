@@ -203,9 +203,9 @@ class MainWindow(QMainWindow, Ui_CT_controller):  # Class with the main window
         self.down_pushButton.clicked.connect(
             lambda: (self.trial_rot_worker(float("-"+self.lineEdit_angle_trial.text().replace("-", "")))))
         self.vert_up_pushButton.clicked.connect(
-            lambda: (self.linear_motion(float("+"+self.lineEdit_vert_disp.text().replace("-", "")))))
+            lambda: (self.linear_motion(float("+"+self.lineEdit_vert_disp.text().replace("-", "")), False, False)))
         self.vert_down_pushButton.clicked.connect(
-            lambda: (self.linear_motion(float("-"+self.lineEdit_vert_disp.text().replace("-", "")))))
+            lambda: (self.linear_motion(float("-"+self.lineEdit_vert_disp.text().replace("-", "")), False, False)))
         self.pushButton_set.clicked.connect(self.read_linedit)
         self.pushButton_next.clicked.connect(self.switch_window)
         self.pushButton_cancel.clicked.connect(self.stop_reading)
@@ -270,15 +270,21 @@ class MainWindow(QMainWindow, Ui_CT_controller):  # Class with the main window
         values for future predefined parameters
 
         """
+        x_back_step = False
+        y_back_step = False
         self.detector = float(self.lineEdit_detector.text())
         if float(self.detector):
             Grbl.write_config("ct_config", "Distance source detector", new_value=str(self.detector))
+            if self.detector > self.linear.linear_position["X"]:
+                x_back_step = True
             self.linear.linear_position["X"] = self.detector
         self.sample = float(self.lineEdit_sample.text())
         if float(self.sample):
-            Grbl.write_config("ct_config", "Distance Source object", new_value=str(self.sample))
+            Grbl.write_config("ct_config", "Distance source object", new_value=str(self.sample))
+            if self.sample > self.linear.linear_position["Y"]:
+                y_back_step = True
             self.linear.linear_position["Y"] = self.sample
-        self.linear_motion_worker()
+        self.linear_motion_worker(x_back_step, y_back_step)
 
     def get_path(self):  # Choose the path from the dropdown menu
         """
@@ -290,7 +296,7 @@ class MainWindow(QMainWindow, Ui_CT_controller):  # Class with the main window
         Grbl.files_count = Grbl.check_new_file(self.dir_path)
         print(self.dir_path)
 
-    def linear_motion_worker(self):
+    def linear_motion_worker(self, x_back_step, y_back_step):
         """
 
         Description: Start the thread for the linear movement and deactivate the related buttons meanwhile
@@ -301,12 +307,12 @@ class MainWindow(QMainWindow, Ui_CT_controller):  # Class with the main window
         self.vert_down_pushButton.setEnabled(False)
         self.vert_up_pushButton.setEnabled(False)
         self.lineEdit_vert_disp.setEnabled(False)
-        self.worker = Worker(self.linear_motion)
+        self.worker = Worker(self.linear_motion, None, x_back_step, y_back_step)
         self.worker.signals.finished.connect(self.reactivate_linear_buttons)
         self.worker.signals.error.connect(self.stop)
         self.threadpool.start(self.worker)
 
-    def linear_motion(self, advance=None):
+    def linear_motion(self, advance=None, x_back_step=False, y_back_step=False):
 
         """
         Description: Commands the linear movements Gcode
@@ -321,6 +327,17 @@ class MainWindow(QMainWindow, Ui_CT_controller):  # Class with the main window
         self.linear.command_sender("G0 " + "X" + str(self.linear.linear_position["X"])
                                    + "Y" + str(self.linear.linear_position["Y"])
                                    + "Z" + str(self.linear.linear_position["Z"]))
+        if x_back_step:
+            self.linear.command_sender("G4 P1", "ok")
+            self.linear.command_sender("G0 " + "X" + str(self.linear.linear_position["X"] + 10))
+            self.linear.command_sender("G4 P1", "ok")
+            self.linear.command_sender("G0 " + "X" + str(self.linear.linear_position["X"]))
+        if y_back_step:
+            self.linear.command_sender("G4 P1", "ok")
+            self.linear.command_sender("G0 " + "Y" + str(self.linear.linear_position["Y"] + 10))
+            self.linear.command_sender("G4 P1", "ok")
+            self.linear.command_sender("G0 " + "Y" + str(self.linear.linear_position["Y"]))
+
         self.linear.command_sender("G4 P0", "ok")
         self.update_linear_position()
         if self.linear.linear_position == self.linear.check_position:
@@ -379,7 +396,6 @@ class MainWindow(QMainWindow, Ui_CT_controller):  # Class with the main window
         # Save the value of the number of steps to be done for each rotation
         self.n_steps = int(self.lineEdit_steps.text())
         Grbl.write_config("ct_config", "Angles per rotation", new_value=str(self.n_steps))
-        self.linear.linear_position = self.linear.check_position
         controller = Controller(ProgressWindow(self.n_steps, self.dir_path, self.detector, self.sample, self.vertical,
                                                self.detector_type, self.servo, self.mm_per_rot))
         controller.show_window()
@@ -491,6 +507,9 @@ class ProgressWindow(Ui_Progress_window, QMainWindow):
 
     def switch_window(self):
         self.close()
+
+    #  def closeEvent(self, event):
+    #      self.stop_reading()
 
     def stop_reading(self):
         self.servo.stop_reading = True  # Grbl class variable accessible during the command sending process

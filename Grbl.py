@@ -222,9 +222,15 @@ class Grbl:
             self.linear_wco = wco_dict  # Save wco value
         position = position_report.split("MPos")[1].split("|")[0].strip("MPos:").split(">")[0].split(",")
         # If MPos: is given, use WPos = MPos - WCO
-        pos_dict = {"X": float(position[0]) - self.linear_wco["X_co"], "Y": float(position[1]) -
-                    self.linear_wco["Y_co"], "Z": float(position[2]) - self.linear_wco["Z_co"]}
-
+        if self.linear_homed:
+            pos_dict = {"X": float(position[0]) - self.linear_wco["X_co"], "Y": float(position[1]) -
+                        self.linear_wco["Y_co"], "Z": float(position[2]) - self.linear_wco["Z_co"]}
+        else:
+            pos_dict = {"X": float(self.read_config("ct_config", "Distance source detector")[0]),
+                        "Y": float(self.read_config("ct_config", "Distance source object")[0]),
+                        "Z": float(self.read_config("ct_config", "Object vertical position")[0])}
+            self.command_sender("G92 X"+str(pos_dict["X"])+"Y"+str(pos_dict["Y"]))
+            self.linear_homed = True
         return pos_dict
 
     @staticmethod
