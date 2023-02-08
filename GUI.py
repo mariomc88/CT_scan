@@ -6,6 +6,7 @@ from locked import Ui_Unlocksystem
 from progress_bar import Ui_Progress_window
 from connection_parameters import Ui_Connection_parameters
 from Grbl import Grbl
+from aerotech import Ensemble
 import sys
 import time
 from pynput.mouse import Listener, Button
@@ -71,6 +72,7 @@ class ConnectionWindow(QMainWindow, Ui_Connection_parameters, Grbl):
         self.ensemble_port = Grbl.read_config("ensemble", "port")[0]
         self.linear = None
         self.servo = None
+        self.ensemble = None
         self.servo_connected = False
         self.linear_connected = False
         self.combobox()
@@ -84,6 +86,9 @@ class ConnectionWindow(QMainWindow, Ui_Connection_parameters, Grbl):
         print("Serial ports available:", len(Grbl.list_serial_ports))
         self.comboBox_linear.clear()
         self.comboBox_servo.clear()
+        self.lineEdit_ens_IP.clear()
+        self.lineEdit_ens_port.clear()
+
         if self.linear_port:
             self.comboBox_linear.addItem('"Saved"' + self.linear_port)  # Add predetermined port
         if self.servo_port:
@@ -94,7 +99,7 @@ class ConnectionWindow(QMainWindow, Ui_Connection_parameters, Grbl):
         if self.ensemble_IP:  # Check_later, shouldn't this also include a predetermined IP?
             self.lineEdit_ens_IP.setText(self.ensemble_IP)
         if self.ensemble_port:
-            self.lineEdit_ens_port.setText(self.ensemble_port)
+            self.lineEdit_ens_port.setText(str(self.ensemble_port))
 
     def connection(self):
         """
@@ -123,6 +128,14 @@ class ConnectionWindow(QMainWindow, Ui_Connection_parameters, Grbl):
             self.linear_connected = True
         except ValueError as e:
             self.label_error_linear.setText(str(e))
+        try:
+            ensemble_ip = self.lineEdit_ens_IP.text()
+            ensemble_port = self.lineEdit_ens_port.text()
+            self.ensemble = Ensemble(ensemble_ip, int(ensemble_port))
+            self.ensemble.connect()
+            self.ensemble.connected = True
+        except ValueError as e:
+            self.label_error_ensemble.setText(str(e))
         if self.linear_connected and self.servo_connected:
             print("Correct connection")
             return True
@@ -144,10 +157,10 @@ class ConnectionWindow(QMainWindow, Ui_Connection_parameters, Grbl):
         if connection:
 
             if self.linear.lock_state:
-                controller = Controller(UnlockWindow(self.servo, self.linear))
+                controller = Controller(UnlockWindow(self.servo, self.linear, self.ensemble))
                 controller.show_window()
             else:
-                ConnectionWindow.controller_MainWindow = Controller(MainWindow(self.servo, self.linear))
+                ConnectionWindow.controller_MainWindow = Controller(MainWindow(self.servo, self.linear, self.ensemble))
                 ConnectionWindow.controller_MainWindow.show_window()
             self.close()
 
@@ -179,7 +192,7 @@ class MainWindow(QMainWindow, Ui_CT_controller):  # Class with the main window
             - linear(Grbl object): Grbl object with the connection parameters and
             methods of the linear motor
     """
-    def __init__(self, servo, linear):
+    def __init__(self, servo, linear, ensemble):
         super().__init__()
         self.linear = linear
         self.linear.linear_position = dict(self.linear.check_position())
@@ -195,9 +208,15 @@ class MainWindow(QMainWindow, Ui_CT_controller):  # Class with the main window
         self.files_count = 0
         self.setupUi(self)
         self.servo = servo
+        self.ensemble = ensemble
         self.update_linear_position()  # Check for linear stage working position and wco
         self.lineEdit_steps.editingFinished.connect(self.check_even)  # Once the value of steps is introduced, check if
         # it is an even number
+        self.Enable_X_pushButton.clicked.connect(lambda: self.ensemble.enable("X"))
+        self.Enable_Y_pushButton.clicked.connect(lambda: self.ensemble.enable("Y"))
+        self.pushButton_Home_X.clicked.connect(lambda: self.ensemble.home("X"))
+        self.pushButton_Home_Y.clicked.connect(lambda: self.ensemble.home("Y"))
+
         self.up_pushButton.clicked.connect(
             lambda: (self.trial_rot_worker(float("+"+self.lineEdit_angle_trial.text().replace("-", "")))))
         self.down_pushButton.clicked.connect(
@@ -237,7 +256,14 @@ class MainWindow(QMainWindow, Ui_CT_controller):  # Class with the main window
             self.vert_down_pushButton.setEnabled(False)
             self.vert_up_pushButton.setEnabled(False)
             self.lineEdit_vert_disp.setEnabled(False)
-        #  self.thread = None
+        if not ensemble.connected:
+            self.Enable_X_pushButton.setEnabled(False)
+            self.Enable_Y_pushButton.setEnabled(False)
+            self.pushButton_Home_X.setEnabled(False)
+            self.pushButton_Home_Y.setEnabled(False)
+            self.lineEdit_Detector_X.setEnabled(False)
+            self.lineEdit_Detector_Y.setEnabled(False)
+
         #  self.worker = None
         self.worker = None
         self.threadpool = QThreadPool()
@@ -570,12 +596,13 @@ class UnlockWindow(QMainWindow, Ui_Unlocksystem):
     Description: prompts user to either home or override the grbl board if it's in lock state
     """
 
-    def __init__(self, servo, linear):
+    def __init__(self, servo, linear, ensemble):
         super().__init__()
         #  QtWidgets.QApplication.__init__(self)
         self.setupUi(self)
         self.servo = servo
         self.linear = linear
+        self.ensemble = ensemble
         self.pushButton_homing.pressed.connect(self.homing)
         self.pushButton_homing.released.connect(self.switch_window)
         self.pushButton_override.pressed.connect(lambda: (self.linear.command_sender("$X")))
@@ -586,7 +613,7 @@ class UnlockWindow(QMainWindow, Ui_Unlocksystem):
         self.linear.linear_homed = True
 
     def switch_window(self):
-        controller = Controller(MainWindow(self.servo, self.linear))
+        controller = Controller(MainWindow(self.servo, self.linear, self.ensemble))
         controller.show_window()
         self.close()
 
