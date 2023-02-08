@@ -132,6 +132,16 @@ class Ensemble:
         logging.info('positions: %s', str(positions))
         return positions
 
+    def positions_reached(self):
+        """Method to check if both axis are in position.
+        Returns
+        ----------
+        True : position reached
+        """
+        command = "WAIT INPOS XY"
+        self.write_read(command)
+        logging.info('Position reached')
+
     def close(self):
         """Close the connection."""
         self._socket.shutdown(1)
