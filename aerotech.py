@@ -5,6 +5,8 @@ Author R.Cole
 
 import socket
 import logging
+import select
+import time
 
 EOS_CHAR = '\n'   # End of string character
 ACK_CHAR = '%'  # indicate success.
@@ -33,7 +35,8 @@ class Ensemble:
         self.y_enabled = False
         self.x_homed = False
         self.y_homed = False
-
+        self.pos_dict = None
+        self.stop_reading = False
         logging.info('Ensemble instantiated.')
 
     def connect(self):
@@ -51,17 +54,32 @@ class Ensemble:
 
     def enable(self, axis):
         """Enable the axis"""
+        axis = axis[0]
+        command = ""
         if not self.connected:
             self.connect()
-        self.write_read('ENABLE ' + axis)
         if axis == "X":
-            self.x_enabled = True
-        elif axis == "Y":
-            self.y_enabled = True
+            if not self.x_enabled:
+                command = 'ENABLE ' + axis
+            else:
+                command = 'DISABLE ' + axis
+            self.x_enabled = not self.x_enabled
+        if axis == "Y":
+            if not self.y_enabled:
+                command = 'ENABLE ' + axis
+            else:
+                command = 'DISABLE ' + axis
+            self.y_enabled = not self.y_enabled
         # self.write_read('ENABLE Y')
         #  self.write_read('ENABLE Z')
-        logging.info('Enabled axis', axis)
-        print('Enabled axis', axis)
+        self.write_read(command)
+        if "ENABLE" in command:
+            logging.info('Enabled axis', axis)
+            print('Enabled axis', axis)
+        else:
+            logging.info('Disabled axis', axis)
+            print('Disabled axis', axis)
+        return True
 
     def write_read(self, command):
         """This method writes a command and returns the response,
@@ -75,19 +93,28 @@ class Ensemble:
         response : str
             The response to a command
         """
+        print("Command sent: ", command)
         if EOS_CHAR not in command:
             command = ''.join((command, EOS_CHAR))
-
         self._socket.send(command.encode())
-        read = self._socket.recv(4096).decode().strip()
+        self._socket.setblocking(True)
+        ready = select.select([self._socket], [], [], None)
+        while not ready:
+            if self.stop_reading:
+                self.abort_motion()
+            print("checking")
+            time.sleep(0.1)
+        read = self._socket.recv(1024).decode().strip()
         code, response = read[0], read[1:]
+        print("code", code)
+        print("response", response)
         if code != ACK_CHAR:
             logging.error("Error from write_read().")
         return response
 
     def home(self, axis):
         """This method homes the stage."""
-        self.connect()
+        axis = axis[0]
         if axis == "X" and self.x_enabled:
             self.write_read('HOME X')
             self.x_homed = True
@@ -97,26 +124,45 @@ class Ensemble:
             self.write_read('HOME Y')
             self.y_homed = True
             print("Y axis homed")
-
+        else:
+            print("Enable the axis first")
+            return False
         # self.write_read('HOME Y')
         # self.write_read('HOME Z')
         logging.info('Homed', axis)
+        print('Homed', axis)
+        return True
 
-    def move(self, x_pos, y_pos):  # , z_pos):
+    def move(self, x_pos="", y_pos=""):  # , z_pos):
         """Move to an X Y Z
         Parameters
         ----------
-        x_pos : double
-            The x position required
-        y_pos : double
-            The y position required
+        x_pos : string
+            The x position required with or without feed rate
+        y_pos : string
+            The y position required with or without feed rate
         """
         # command = "MOVEABS X%f XF10.0 Y%f YF10.0 Z%f ZF10.0" % (
         #     x_pos, y_pos, z_pos)
-        command = "MOVEABS X%f XF10.0 Y%f YF10.0" % (
-            x_pos, y_pos)
+        command = "MOVEABS "
+        if x_pos:
+            command += str(x_pos)
+            if "XF" not in x_pos:
+                command += " XF10.0"
+            if not self.x_enabled:
+                print("Enable the X axis first")
+                return False
+        if y_pos:
+            command += " " + str(y_pos)
+            if "XF" not in y_pos:
+                command += " YF10.0"
+            if not self.y_enabled:
+                print("Enable the Y axis first")
+                return False
+        print("Command sending is: ", command)
         self.write_read(command)
         logging.info('Command written: %s', command)
+        return True
 
     def get_positions(self):
         """Method to get the latest positions.
@@ -132,15 +178,23 @@ class Ensemble:
         logging.info('positions: %s', str(positions))
         return positions
 
-    def positions_reached(self):
+    def position_reached(self, axis):
         """Method to check if both axis are in position.
         Returns
         ----------
-        True : position reached
+        True: position reached
         """
-        command = "WAIT INPOS XY"
+        command = "WAIT INPOS " + axis
         self.write_read(command)
-        logging.info('Position reached')
+        logging.info("Position in axis %s reached" % axis)
+        print("Position in axis %s reached" % axis)
+
+    def abort_motion(self):
+        """Method to abort motion on both axis"""
+        command = "ABORT X Y"
+        self.write_read(command)
+        logging.info("Abort motion on both axis")
+        print("Abort motion on both axis")
 
     def close(self):
         """Close the connection."""

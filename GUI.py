@@ -22,7 +22,7 @@ class WorkerSignals(QObject):
 
     finished = QtCore.pyqtSignal()
     error = QtCore.pyqtSignal(str)
-    result = QtCore.pyqtSignal(bool)
+    result = QtCore.pyqtSignal(object)
     progress = QtCore.pyqtSignal(int)
 
 
@@ -47,11 +47,13 @@ class Worker(QRunnable):
     def run(self):
         try:
             result = self.fn(*self.args, **self.kwargs)
-            self.signals.result.emit(result)  # Return the result of the processing
-            self.signals.finished.emit()  # Done
         except NotImplementedError:  # Captures the termination process for the command_sender()
             self.signals.finished.emit()
             self.signals.error.emit("Close all")
+        else:
+            self.signals.result.emit(result)  # Return the result of the processing
+        finally:
+            self.signals.finished.emit()  # Done
 
 
 class ConnectionWindow(QMainWindow, Ui_Connection_parameters, Grbl):
@@ -209,13 +211,23 @@ class MainWindow(QMainWindow, Ui_CT_controller):  # Class with the main window
         self.setupUi(self)
         self.servo = servo
         self.ensemble = ensemble
-        self.update_linear_position()  # Check for linear stage working position and wco
+        if self.ensemble.connected:
+            self.ensemble.pos_dict = self.ensemble.get_positions()
+            self.ensemble_x = self.ensemble.pos_dict["X"]
+            self.ensemble_y = self.ensemble.pos_dict["Y"]
+            self.lineEdit_Detector_X.setText(str(self.ensemble_x))
+            self.lineEdit_Detector_Y.setText(str(self.ensemble_y))
+        self.update_linear_positions()  # Check for linear stage working position and wco
         self.lineEdit_steps.editingFinished.connect(self.check_even)  # Once the value of steps is introduced, check if
         # it is an even number
-        self.Enable_X_pushButton.clicked.connect(lambda: self.ensemble.enable("X"))
-        self.Enable_Y_pushButton.clicked.connect(lambda: self.ensemble.enable("Y"))
-        self.pushButton_Home_X.clicked.connect(lambda: self.ensemble.home("X"))
-        self.pushButton_Home_Y.clicked.connect(lambda: self.ensemble.home("Y"))
+        self.Enable_X_pushButton.clicked.connect(lambda: self.ensemble_worker(self.Enable_X_pushButton,
+                                                                              self.ensemble.enable, "X"))
+        self.Enable_Y_pushButton.clicked.connect(lambda: self.ensemble_worker(self.Enable_Y_pushButton,
+                                                                              self.ensemble.enable, "Y"))
+        self.pushButton_Home_X.clicked.connect(lambda: self.ensemble_worker(self.pushButton_Home_X,
+                                                                            self.ensemble.home, "X"))
+        self.pushButton_Home_Y.clicked.connect(lambda: self.ensemble_worker(self.pushButton_Home_Y,
+                                                                            self.ensemble.home, "Y"))
 
         self.up_pushButton.clicked.connect(
             lambda: (self.trial_rot_worker(float("+"+self.lineEdit_angle_trial.text().replace("-", "")))))
@@ -268,7 +280,7 @@ class MainWindow(QMainWindow, Ui_CT_controller):  # Class with the main window
         self.worker = None
         self.threadpool = QThreadPool()
 
-    def update_linear_position(self):
+    def update_linear_positions(self):
         """
 
         Description: Fills the position label with the linear position from the "?" command
@@ -277,6 +289,10 @@ class MainWindow(QMainWindow, Ui_CT_controller):  # Class with the main window
         self.label_detector_position.setText(str(self.linear.linear_position["X"]))
         self.label_sample_position.setText(str(self.linear.linear_position["Y"]))
         self.label_vertical_position.setText(str(self.linear.linear_position["Z"]))
+        
+    def update_ensemble_positions(self):
+        self.label_X_detector_position.setText(str(self.ensemble.get_positions()["X"]))
+        self.label_Y_detector_position.setText(str(self.ensemble.get_positions()["Y"]))
 
     def check_even(self):
         """
@@ -311,6 +327,10 @@ class MainWindow(QMainWindow, Ui_CT_controller):  # Class with the main window
                 y_back_step = True
             self.linear.linear_position["Y"] = self.sample
         self.linear_motion_worker(x_back_step, y_back_step)
+        self.ensemble_x = float(self.lineEdit_Detector_X.text())
+        self.ensemble_y = float(self.lineEdit_Detector_Y.text())
+        if self.ensemble_x or self.ensemble_y:
+            self.ensemble_worker(None, self.ensemble.move, "X"+str(self.ensemble_x) + "Y"+str(self.ensemble_y))
 
     def get_path(self):  # Choose the path from the dropdown menu
         """
@@ -353,19 +373,26 @@ class MainWindow(QMainWindow, Ui_CT_controller):  # Class with the main window
         self.linear.command_sender("G0 " + "X" + str(self.linear.linear_position["X"])
                                    + "Y" + str(self.linear.linear_position["Y"])
                                    + "Z" + str(self.linear.linear_position["Z"]))
-        if x_back_step:
+        if x_back_step and y_back_step:
             self.linear.command_sender("G4 P1", "ok")
-            self.linear.command_sender("G0 " + "X" + str(self.linear.linear_position["X"] + 10))
+            self.linear.command_sender("G0 " + "X" + str(self.linear.linear_position["X"] + 10)
+                                       + "Y" + str(self.linear.linear_position["Y"] + 10))
             self.linear.command_sender("G4 P1", "ok")
-            self.linear.command_sender("G0 " + "X" + str(self.linear.linear_position["X"]))
-        if y_back_step:
+            self.linear.command_sender("G0 " + "X" + str(self.linear.linear_position["X"])
+                                       + "Y" + str(self.linear.linear_position["Y"]))
+        elif y_back_step:
             self.linear.command_sender("G4 P1", "ok")
             self.linear.command_sender("G0 " + "Y" + str(self.linear.linear_position["Y"] + 10))
             self.linear.command_sender("G4 P1", "ok")
             self.linear.command_sender("G0 " + "Y" + str(self.linear.linear_position["Y"]))
+        elif x_back_step:
+            self.linear.command_sender("G4 P1", "ok")
+            self.linear.command_sender("G0 " + "X" + str(self.linear.linear_position["X"] + 10))
+            self.linear.command_sender("G4 P1", "ok")
+            self.linear.command_sender("G0 " + "X" + str(self.linear.linear_position["X"]))
 
         self.linear.command_sender("G4 P0", "ok")
-        self.update_linear_position()
+        self.update_linear_positions()
         if self.linear.linear_position == self.linear.check_position:
             return True
         else:
@@ -410,9 +437,50 @@ class MainWindow(QMainWindow, Ui_CT_controller):  # Class with the main window
         self.down_pushButton.setEnabled(True)
         self.lineEdit_angle_trial.setEnabled(True)
 
+    def ensemble_worker(self, button, function, *args):
+        self.Enable_X_pushButton.setEnabled(False)
+        self.Enable_Y_pushButton.setEnabled(False)
+        self.pushButton_Home_X.setEnabled(False)
+        self.pushButton_Home_Y.setEnabled(False)
+        self.lineEdit_Detector_X.setEnabled(False)
+        self.lineEdit_Detector_Y.setEnabled(False)
+        self.pushButton_set.setEnabled(False)
+        self.pushButton_next.setEnabled(False)
+        self.worker = Worker(function, *args)
+        #  self.worker.signals.result.connect(self.result)
+        #  self.worker.signals.result.connect(lambda: self.reactivate_ensemble_buttons(button))
+        self.worker.signals.result.connect(lambda result: self.reactivate_ensemble_buttons(button, result))
+        self.worker.signals.error.connect(self.stop)
+        self.threadpool.start(self.worker)
+
+    @staticmethod
+    def result(s):
+        print(s)
+
+    def reactivate_ensemble_buttons(self, button, result):
+        self.update_ensemble_positions()
+        self.Enable_X_pushButton.setEnabled(True)
+        self.Enable_Y_pushButton.setEnabled(True)
+        self.pushButton_Home_X.setEnabled(True)
+        self.pushButton_Home_Y.setEnabled(True)
+        self.lineEdit_Detector_X.setEnabled(True)
+        self.lineEdit_Detector_Y.setEnabled(True)
+        self.pushButton_set.setEnabled(True)
+        self.pushButton_next.setEnabled(True)
+        if result and button:
+            button_text = button.text()
+            if "Enable" in button_text:
+                if ("X" in button_text and self.ensemble.x_enabled) or ("Y" in button_text and self.ensemble.y_enabled):
+                    button.setStyleSheet("background-color : lightblue")
+                else:
+                    button.setStyleSheet("background-color : None")
+            if "Home" in button_text:
+                button.setStyleSheet("background-color : lightblue")
+
     def stop_reading(self):
         self.servo.stop_reading = True  # Grbl variable accessible during the command sending process
         self.linear.stop_reading = True  # Grbl variable accessible during the command sending process
+        self.ensemble.abort_motion()  # Ensemble variable accessible during the command sending process
 
     @staticmethod
     def stop():
