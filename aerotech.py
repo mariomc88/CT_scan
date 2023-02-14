@@ -5,8 +5,8 @@ Author R.Cole
 
 import socket
 import logging
-import select
-import time
+# import select
+# import time
 
 EOS_CHAR = '\n'   # End of string character
 ACK_CHAR = '%'  # indicate success.
@@ -15,7 +15,7 @@ FAULT_CHAR = '#'  # task error.
 TIMEOUT_CHAR = '$'
 
 
-class Ensemble:
+class Ensemble(object):
     """Class providing control over a single Aerotech XYZ stage."""
     def __init__(self, ip, port):
         """
@@ -28,7 +28,7 @@ class Ensemble:
         """
         self._ip = ip
         self._port = port
-        self._socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self._socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self._socket.setblocking(True)
         self.connected = False
         self.x_enabled = False
@@ -97,13 +97,13 @@ class Ensemble:
         if EOS_CHAR not in command:
             command = ''.join((command, EOS_CHAR))
         self._socket.send(command.encode())
-        self._socket.setblocking(True)
-        ready = select.select([self._socket], [], [], None)
-        while not ready:
-            if self.stop_reading:
-                self.abort_motion()
-            print("checking")
-            time.sleep(0.1)
+        # ready = select.select([self._socket], [], [])
+        # print(self._socket)
+        # print("First_ready: ", ready)
+        # while self._socket not in ready[0]:
+        #     print("not ready")
+        #     time.sleep(0.5)
+        # print("Ready: ", ready)
         read = self._socket.recv(1024).decode().strip()
         code, response = read[0], read[1:]
         print("code", code)
@@ -174,7 +174,7 @@ class Ensemble:
         x_pos = float(self.write_read('PFBK X'))
         y_pos = float(self.write_read('PFBK Y'))
         # z_pos = float(self.write_read('PFBK Z'))
-        positions = {'X': x_pos, 'Y': y_pos}  # , 'Z':z_pos}
+        positions = {'X': round(x_pos, 5), 'Y': round(y_pos, 5)}  # , 'Z':z_pos}
         logging.info('positions: %s', str(positions))
         return positions
 
@@ -190,8 +190,9 @@ class Ensemble:
         print("Position in axis %s reached" % axis)
 
     def abort_motion(self):
+        self.connect()
         """Method to abort motion on both axis"""
-        command = "ABORT X Y"
+        command = "ABORT X"
         self.write_read(command)
         logging.info("Abort motion on both axis")
         print("Abort motion on both axis")
@@ -202,3 +203,8 @@ class Ensemble:
         self._socket.close()
         self.connected = False
         logging.info("Connection closed")
+
+
+class EnsembleStop(Ensemble):
+    def __init__(self, ip, port):
+        super().__init__(ip, port)

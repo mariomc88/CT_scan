@@ -6,7 +6,7 @@ from locked import Ui_Unlocksystem
 from progress_bar import Ui_Progress_window
 from connection_parameters import Ui_Connection_parameters
 from Grbl import Grbl
-from aerotech import Ensemble
+from aerotech import Ensemble, EnsembleStop
 import sys
 import time
 from pynput.mouse import Listener, Button
@@ -75,6 +75,7 @@ class ConnectionWindow(QMainWindow, Ui_Connection_parameters, Grbl):
         self.linear = None
         self.servo = None
         self.ensemble = None
+        self.ensemble_stop = None
         self.servo_connected = False
         self.linear_connected = False
         self.combobox()
@@ -135,6 +136,7 @@ class ConnectionWindow(QMainWindow, Ui_Connection_parameters, Grbl):
             ensemble_port = self.lineEdit_ens_port.text()
             self.ensemble = Ensemble(ensemble_ip, int(ensemble_port))
             self.ensemble.connect()
+            self.ensemble_stop = EnsembleStop(ensemble_ip, 8001)
             self.ensemble.connected = True
         except ValueError as e:
             self.label_error_ensemble.setText(str(e))
@@ -159,10 +161,11 @@ class ConnectionWindow(QMainWindow, Ui_Connection_parameters, Grbl):
         if connection:
 
             if self.linear.lock_state:
-                controller = Controller(UnlockWindow(self.servo, self.linear, self.ensemble))
+                controller = Controller(UnlockWindow(self.servo, self.linear, self.ensemble, self.ensemble_stop))
                 controller.show_window()
             else:
-                ConnectionWindow.controller_MainWindow = Controller(MainWindow(self.servo, self.linear, self.ensemble))
+                ConnectionWindow.controller_MainWindow = Controller(MainWindow(self.servo, self.linear, self.ensemble,
+                                                                               self.ensemble_stop))
                 ConnectionWindow.controller_MainWindow.show_window()
             self.close()
 
@@ -194,7 +197,7 @@ class MainWindow(QMainWindow, Ui_CT_controller):  # Class with the main window
             - linear(Grbl object): Grbl object with the connection parameters and
             methods of the linear motor
     """
-    def __init__(self, servo, linear, ensemble):
+    def __init__(self, servo, linear, ensemble, ensemble_stop):
         super().__init__()
         self.linear = linear
         self.linear.linear_position = dict(self.linear.check_position())
@@ -211,6 +214,7 @@ class MainWindow(QMainWindow, Ui_CT_controller):  # Class with the main window
         self.setupUi(self)
         self.servo = servo
         self.ensemble = ensemble
+        self.ensemble_stop = ensemble_stop
         if self.ensemble.connected:
             self.ensemble.pos_dict = self.ensemble.get_positions()
             self.ensemble_x = self.ensemble.pos_dict["X"]
@@ -370,24 +374,36 @@ class MainWindow(QMainWindow, Ui_CT_controller):  # Class with the main window
         """
         if advance:
             self.linear.linear_position["Z"] += advance
-        self.linear.command_sender("G0 " + "X" + str(self.linear.linear_position["X"])
-                                   + "Y" + str(self.linear.linear_position["Y"])
-                                   + "Z" + str(self.linear.linear_position["Z"]))
+        if self.linear.linear_position["X"] <= self.linear.linear_x_limit and \
+                self.linear.linear_position["Y"] <= self.linear.linear_y_limit and \
+                (self.linear.linear_position["X"] - self.linear.linear_position["Y"]) <= self.linear.linear_min_dist_xy:
+            self.linear.command_sender("G0 " + "X" + str(self.linear.linear_position["X"])
+                                       + "Y" + str(self.linear.linear_position["Y"])
+                                       + "Z" + str(self.linear.linear_position["Z"]))
+        else:
+            print("Distance: ", self.linear.linear_position["X"] - self.linear.linear_position["Y"], "compared to: ",
+                  self.linear.linear_min_dist_xy)
+            print("Too big positional values for X or Y or X and Y stages too close")
+            return False
         if x_back_step and y_back_step:
             self.linear.command_sender("G4 P1", "ok")
-            self.linear.command_sender("G0 " + "X" + str(self.linear.linear_position["X"] + 10)
-                                       + "Y" + str(self.linear.linear_position["Y"] + 10))
+            self.linear.command_sender("G0 " + "X" + str(self.linear.linear_position["X"] +
+                                                         self.linear.linear_step_back)
+                                       + "Y" + str(self.linear.linear_position["Y"] +
+                                                   self.linear_step_back))
             self.linear.command_sender("G4 P1", "ok")
             self.linear.command_sender("G0 " + "X" + str(self.linear.linear_position["X"])
                                        + "Y" + str(self.linear.linear_position["Y"]))
         elif y_back_step:
             self.linear.command_sender("G4 P1", "ok")
-            self.linear.command_sender("G0 " + "Y" + str(self.linear.linear_position["Y"] + 10))
+            self.linear.command_sender("G0 " + "Y" + str(self.linear.linear_position["Y"] +
+                                                         self.linear_step_back))
             self.linear.command_sender("G4 P1", "ok")
             self.linear.command_sender("G0 " + "Y" + str(self.linear.linear_position["Y"]))
         elif x_back_step:
             self.linear.command_sender("G4 P1", "ok")
-            self.linear.command_sender("G0 " + "X" + str(self.linear.linear_position["X"] + 10))
+            self.linear.command_sender("G0 " + "X" + str(self.linear.linear_position["X"] +
+                                                         self.linear_step_back))
             self.linear.command_sender("G4 P1", "ok")
             self.linear.command_sender("G0 " + "X" + str(self.linear.linear_position["X"]))
 
@@ -480,7 +496,7 @@ class MainWindow(QMainWindow, Ui_CT_controller):  # Class with the main window
     def stop_reading(self):
         self.servo.stop_reading = True  # Grbl variable accessible during the command sending process
         self.linear.stop_reading = True  # Grbl variable accessible during the command sending process
-        self.ensemble.abort_motion()  # Ensemble variable accessible during the command sending process
+        self.ensemble_stop.abort_motion()  # Ensemble variable accessible during the command sending process
 
     @staticmethod
     def stop():
@@ -636,7 +652,7 @@ class ProgressWindow(Ui_Progress_window, QMainWindow):
                     listener.join()
                 print(self.click_position)
             else:
-                time.sleep(self.trigger_delay)  # delay until next scan start, click on to scan button
+                # time.sleep(self.trigger_delay)  # delay until next scan start, click on to scan button
                 mouse = Mouse_controller()
                 mouse.position = tuple(self.click_position)
                 mouse.press(Button.left)
@@ -664,13 +680,14 @@ class UnlockWindow(QMainWindow, Ui_Unlocksystem):
     Description: prompts user to either home or override the grbl board if it's in lock state
     """
 
-    def __init__(self, servo, linear, ensemble):
+    def __init__(self, servo, linear, ensemble, ensemble_stop):
         super().__init__()
         #  QtWidgets.QApplication.__init__(self)
         self.setupUi(self)
         self.servo = servo
         self.linear = linear
         self.ensemble = ensemble
+        self.ensemble_stop = ensemble_stop
         self.pushButton_homing.pressed.connect(self.homing)
         self.pushButton_homing.released.connect(self.switch_window)
         self.pushButton_override.pressed.connect(lambda: (self.linear.command_sender("$X")))
@@ -681,7 +698,7 @@ class UnlockWindow(QMainWindow, Ui_Unlocksystem):
         self.linear.linear_homed = True
 
     def switch_window(self):
-        controller = Controller(MainWindow(self.servo, self.linear, self.ensemble))
+        controller = Controller(MainWindow(self.servo, self.linear, self.ensemble, self.ensemble_stop))
         controller.show_window()
         self.close()
 
